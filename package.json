@@ -1,0 +1,17 @@
+{
+  "name": "shots",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": { "shots": "src/cli.ts" },
+  "scripts": {
+    "build:helper": "cd native && swift build -c release",
+    "build": "bun run build:helper && bun build --compile src/cli.ts --outfile dist/shots && cp native/.build/release/shots-helper dist/shots-helper",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/bun": "1.3.14",
+    "typescript": "5.9.3"
+  }
+}
