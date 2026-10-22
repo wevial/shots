@@ -121,6 +121,24 @@ The defaults are written on first run, and any key can be overridden. These are 
 
 The index lives at `~/.local/share/shots/shots.db` (WAL). The `jobs` table makes the daemon idempotent and restart-safe: jobs interrupted mid-run resume, files with the same bytes are skipped as duplicates, and non-screenshots are skipped once and then left alone. Originals are never deleted. A move is a hard link followed by an unlink (copy, verify, unlink across volumes), and it refuses to overwrite.
 
+## Viewer app (Shots.app)
+
+`app/` is a SwiftUI app for browsing and fixing the index. It has a sidebar (All, Needs Review, Failed, categories with counts), a thumbnail grid with FTS search, and an inspector showing the preview, category picker, re-run buttons for Apple/Claude/Codex, tags, metadata, and OCR text. It also supports Quick Look (Space), drag-out, Reveal in Finder, and a menu bar icon that shows the review count and recent shots.
+
+It reads `shots.db` read-only and refreshes when `PRAGMA data_version` changes. Every change goes through `shots recat … --json`, so classification, privacy rules, and file moves stay in one place. The app has no way to delete files.
+
+To build and copy the app to `~/Applications/Shots.app`:
+
+```bash
+scripts/build-app.sh --install
+```
+
+For development, open `app/Package.swift` in Xcode. Each view has a `#Preview` backed by `Shot.samples`. To run the tests:
+
+```bash
+swift test --package-path app
+```
+
 ## Development
 
 ```bash

@@ -1,0 +1,61 @@
+import Foundation
+
+/// The parts of `shots config --json` the viewer needs.
+public struct ShotsConfig: Sendable, Equatable {
+    /// Where the config file lives (`~/.config/shots/config.json`).
+    public var configPath: String
+    public var dbPath: String
+    public var categories: [String]
+    public var categoryHints: [String: String]
+    public var outputRoot: String
+    public var inbox: String
+
+    public init(
+        configPath: String,
+        dbPath: String,
+        categories: [String],
+        categoryHints: [String: String] = [:],
+        outputRoot: String,
+        inbox: String
+    ) {
+        self.configPath = configPath
+        self.dbPath = dbPath
+        self.categories = categories
+        self.categoryHints = categoryHints
+        self.outputRoot = outputRoot
+        self.inbox = inbox
+    }
+
+    /// What the daemon uses when no config file overrides it.
+    public static var defaults: ShotsConfig {
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        return ShotsConfig(
+            configPath: "\(home)/.config/shots/config.json",
+            dbPath: "\(home)/.local/share/shots/shots.db",
+            categories: ["code", "design", "ui-reference", "docs", "chat", "finance", "receipts",
+                         "shopping", "travel", "social", "errors", "misc"],
+            outputRoot: "\(home)/Screenshots",
+            inbox: "\(home)/Screenshots/_inbox"
+        )
+    }
+
+    public var inboxURL: URL { URL(filePath: inbox) }
+}
+
+extension ShotsConfig: Decodable {
+    private enum CodingKeys: String, CodingKey { case path, dbPath, config }
+    private enum ConfigKeys: String, CodingKey { case categories, categoryHints, outputRoot, inbox }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let config = try c.nestedContainer(keyedBy: ConfigKeys.self, forKey: .config)
+        self.init(
+            configPath: try c.decode(String.self, forKey: .path),
+            dbPath: try c.decode(String.self, forKey: .dbPath),
+            categories: try config.decode([String].self, forKey: .categories),
+            categoryHints: try config.decodeIfPresent([String: String].self, forKey: .categoryHints) ?? [:],
+            outputRoot: try config.decode(String.self, forKey: .outputRoot),
+            inbox: try config.decode(String.self, forKey: .inbox)
+        )
+    }
+}
