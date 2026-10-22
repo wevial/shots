@@ -9,13 +9,13 @@ struct ContentView: View {
 
     @Environment(AppModel.self) private var model
     @Environment(\.openWindow) private var openWindow
-    @State private var showsInspector = true
-    @State private var showsPalette = false
+    @Environment(MainWindowState.self) private var window
     @FocusState private var focus: Pane?
 
     var body: some View {
         // @Bindable turns the environment model into bindings ($model.searchText).
         @Bindable var model = model
+        @Bindable var window = window
 
         NavigationSplitView {
             SidebarView()
@@ -35,7 +35,7 @@ struct ContentView: View {
                 .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
                 // On the detail column, not the split view: wrapped around the whole split, the
                 // inspector stopped the window from shrinking and the sidebar got clipped.
-                .inspector(isPresented: $showsInspector) {
+                .inspector(isPresented: $window.showsInspector) {
                     inspector
                         .inspectorColumnWidth(min: 260, ideal: 320, max: 480)
                 }
@@ -46,23 +46,19 @@ struct ContentView: View {
             }
         }
         .overlay {
-            if showsPalette {
-                CommandPalette(isPresented: $showsPalette, showsInspector: $showsInspector) {
+            if window.showsPalette {
+                CommandPalette(isPresented: $window.showsPalette, showsInspector: $window.showsInspector) {
                     ActivationPolicy.shared.activateForWindow()
                     openWindow(id: "status")
                 }
             }
         }
         // Back to the grid after the palette closes, so arrow keys work straight away.
-        .onChange(of: showsPalette) { _, open in if !open { focus = .grid } }
+        .onChange(of: window.showsPalette) { _, open in if !open { focus = .grid } }
         .toolbar {
             ToolbarItem(placement: .primaryAction) { inspectorToggle }
         }
-        .focusedSceneValue(\.windowActions, WindowActions(
-            focusSearch: { focus = .search },
-            toggleInspector: { showsInspector.toggle() },
-            openPalette: { showsPalette = true }
-        ))
+        .onChange(of: window.searchFocusRequests) { focus = .search }
         .quickLookPreview($model.quickLookURL)
         .alert("Something went wrong", isPresented: $model.isShowingError, presenting: model.lastError) { _ in
             Button("OK") {}
@@ -71,7 +67,7 @@ struct ContentView: View {
         }
         // The narrowest layout that doesn't clip: the grid column sits under the floating
         // sidebar, so the sidebar counts twice, plus one card column, plus the inspector if open.
-        .frame(minWidth: showsInspector ? 950 : 720, minHeight: 500)
+        .frame(minWidth: window.showsInspector ? 950 : 720, minHeight: 500)
     }
 
     /// From the search field into the results, selecting the first one if nothing is selected.
@@ -81,8 +77,8 @@ struct ContentView: View {
     }
 
     private var inspectorToggle: some View {
-        Button("Inspector", systemImage: "sidebar.trailing") { showsInspector.toggle() }
-            .help(showsInspector ? "Hide Inspector" : "Show Inspector")
+        Button("Inspector", systemImage: "sidebar.trailing") { window.showsInspector.toggle() }
+            .help(window.showsInspector ? "Hide Inspector" : "Show Inspector")
             .clickable()
     }
 
@@ -112,9 +108,11 @@ struct ContentView: View {
 #Preview {
     ContentView()
         .environment(AppModel.preview(selecting: Shot.sample))
+        .environment(MainWindowState())
 }
 
 #Preview("Needs Review") {
     ContentView()
         .environment(AppModel.preview(scope: .review))
+        .environment(MainWindowState())
 }

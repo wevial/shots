@@ -6,6 +6,7 @@ import SwiftUI
 struct ShotsApp: App {
     // One model for the whole app, shared by the windows and the menu bar.
     @State private var model: AppModel
+    @State private var mainWindow = MainWindowState()
     /// Kept for the app's lifetime; it shows its own panels.
     @State private var capturePreviews: CapturePreviewController
     @NSApplicationDelegateAdaptor private var appDelegate: AppDelegate
@@ -29,6 +30,7 @@ struct ShotsApp: App {
         Window("Shots", id: "main") {
             ContentView()
                 .environment(model)
+                .environment(mainWindow)
         }
         .defaultSize(width: 1200, height: 760)
         .defaultLaunchBehavior(.suppressed)
@@ -38,7 +40,7 @@ struct ShotsApp: App {
                     .keyboardShortcut("r")
             }
             StatusCommand()
-            ShotsCommands(model: model)
+            ShotsCommands(model: model, window: mainWindow)
         }
 
         Window("Shots Status", id: "status") {

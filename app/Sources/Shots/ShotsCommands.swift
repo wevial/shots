@@ -1,42 +1,38 @@
 import ShotsKit
 import SwiftUI
 
-/// What the main window lets the menu bar's commands do to it. The window publishes this with
-/// `focusedSceneValue`, so the shortcuts work whenever that window is key.
-struct WindowActions {
-    var focusSearch: () -> Void
-    var toggleInspector: () -> Void
-    var openPalette: () -> Void
-}
-
-extension FocusedValues {
-    @Entry var windowActions: WindowActions?
+/// The main window's own state, owned by the app so its menu commands can reach it directly.
+/// (A focused value didn't work: it never reached the menus while the search field had focus,
+/// so ⌘K was disabled and the keystroke fell through to the text field.)
+@MainActor @Observable
+final class MainWindowState {
+    var showsInspector = true
+    var showsPalette = false
+    /// Bumped by ⌘F; the window moves focus to the search field when it changes.
+    var searchFocusRequests = 0
 }
 
 /// Keyboard shortcuts in the app's menus: Find (⌘F), the command palette (⌘K), the inspector
 /// (⌥⌘I), and ⌘1–⌘9 for the sidebar rows in order.
 struct ShotsCommands: Commands {
     let model: AppModel
-    @FocusedValue(\.windowActions) private var actions
+    let window: MainWindowState
 
     var body: some Commands {
         CommandGroup(after: .pasteboard) {
             Divider()
-            Button("Find") { actions?.focusSearch() }
+            Button("Find") { window.searchFocusRequests += 1 }
                 .keyboardShortcut("f")
-                .disabled(actions == nil)
         }
 
         CommandGroup(after: .sidebar) {
-            Button("Toggle Inspector") { actions?.toggleInspector() }
+            Button("Toggle Inspector") { window.showsInspector.toggle() }
                 .keyboardShortcut("i", modifiers: [.command, .option])
-                .disabled(actions == nil)
         }
 
         CommandMenu("Go") {
-            Button("Command Palette…") { actions?.openPalette() }
+            Button("Command Palette…") { window.showsPalette.toggle() }
                 .keyboardShortcut("k")
-                .disabled(actions == nil)
             Divider()
             ForEach(Array(scopes.prefix(9).enumerated()), id: \.offset) { index, scope in
                 Button(scope.title) { model.scope = scope }
