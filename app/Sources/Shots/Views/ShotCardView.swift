@@ -22,13 +22,13 @@ struct ShotCardView: View {
                             .background(.regularMaterial, in: .rect(cornerRadius: 8))
                     }
                 }
-                .overlay(alignment: .topTrailing) {
+                .overlay(alignment: .bottom) {
                     if isHovered && shot.fileExists {
-                        CopyImageButton(shot: shot)
-                            .padding(6)
-                            .transition(.opacity)
+                        CopyStrip(shot: shot)
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
                     }
                 }
+                .clipShape(.rect(cornerRadius: 6))
 
             Text(shot.displayTitle)
                 .font(.callout.weight(.medium))
@@ -67,8 +67,9 @@ struct ShotCardView: View {
     }
 }
 
-/// The two-squares copy button on a hovered card; shows a checkmark for a moment after copying.
-private struct CopyImageButton: View {
+/// A full-width "Copy" strip along the bottom of a hovered card's image: a big target that
+/// doesn't change the card's size. Shows "Copied" for a moment after a click.
+private struct CopyStrip: View {
     @Environment(AppModel.self) private var model
     let shot: Shot
     @State private var copied = false
@@ -82,13 +83,17 @@ private struct CopyImageButton: View {
                 copied = false
             }
         } label: {
-            Image(systemName: copied ? "checkmark" : "doc.on.doc")
+            Label(copied ? "Copied" : "Copy", systemImage: copied ? "checkmark" : "doc.on.doc")
+                .font(.callout.weight(.medium))
                 .contentTransition(.symbolEffect(.replace))
-                .frame(width: 26, height: 26)
-                .background(.regularMaterial, in: .rect(cornerRadius: 6))
+                .frame(maxWidth: .infinity)
+                .frame(height: 30)
+                .background(.regularMaterial)
+                .overlay(alignment: .top) { Divider() }
+                .contentShape(.rect)
         }
         .buttonStyle(.plain)
-        .help("Copy Image")
+        .clickable()
     }
 }
 

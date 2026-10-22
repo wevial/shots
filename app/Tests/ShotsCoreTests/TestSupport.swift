@@ -197,3 +197,14 @@ final class FakeNative: Native {
         Permissions(accessibility: true, screenRecording: false)
     }
 }
+
+/// Collects `CaptureEvent`s from any thread, for `processJob(onEvent:)` and `Daemon(onCapture:)`.
+final class EventRecorder: Sendable {
+    private let recorded = Mutex<[CaptureEvent]>([])
+
+    var events: [CaptureEvent] { recorded.withLock { $0 } }
+
+    func record(_ event: CaptureEvent) {
+        recorded.withLock { $0.append(event) }
+    }
+}

@@ -32,6 +32,7 @@ struct ContentView: View {
             ToolbarItem(placement: .primaryAction) {
                 Button("Inspector", systemImage: "sidebar.trailing") { showsInspector.toggle() }
                     .help(showsInspector ? "Hide Inspector" : "Show Inspector")
+                    .clickable()
             }
         }
         .quickLookPreview($model.quickLookURL)

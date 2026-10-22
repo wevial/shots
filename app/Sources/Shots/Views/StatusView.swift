@@ -4,6 +4,7 @@ import SwiftUI
 /// Everything Shots needs from macOS, with live state and a button to fix each item.
 struct StatusView: View {
     @Environment(AppModel.self) private var model
+    @AppStorage(CapturePreviewController.enabledKey) private var showsCapturePreview = true
 
     var body: some View {
         Form {
@@ -41,6 +42,7 @@ struct StatusView: View {
             if case .failed(let message) = model.daemon.state {
                 Text(message).foregroundStyle(.red).textSelection(.enabled)
             }
+            Toggle("Show Preview After Capture", isOn: $showsCapturePreview)
         }
     }
 

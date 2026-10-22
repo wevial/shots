@@ -2,9 +2,10 @@ import ShotsKit
 import SwiftUI
 
 /// Scopes: All, Needs Review, Failed, then one row per category, each with a count.
-/// Selecting a row sets `model.scope`.
+/// Categories with nothing in them fold under "More". Selecting a row sets `model.scope`.
 struct SidebarView: View {
     @Environment(AppModel.self) private var model
+    @AppStorage("sidebarShowsEmptyCategories") private var showsEmpty = false
 
     var body: some View {
         // List(selection:) wants an optional binding; a nil selection (e.g. a click on empty
@@ -21,12 +22,25 @@ struct SidebarView: View {
                 row(.failed)
             }
             Section("Categories") {
-                ForEach(model.categories, id: \.self) { category in
-                    row(.category(category))
+                ForEach(filledCategories, id: \.self) { row(.category($0)) }
+                if !emptyCategories.isEmpty {
+                    DisclosureGroup("More", isExpanded: $showsEmpty) {
+                        ForEach(emptyCategories, id: \.self) { row(.category($0)) }
+                    }
+                    .clickable()
                 }
             }
         }
         .navigationSplitViewColumnWidth(min: 180, ideal: 210, max: 280)
+    }
+
+    /// Categories that hold screenshots, plus the selected one so the selection never vanishes.
+    private var filledCategories: [String] {
+        model.categories.filter { model.counts.count(for: .category($0)) > 0 || model.scope == .category($0) }
+    }
+
+    private var emptyCategories: [String] {
+        model.categories.filter { !filledCategories.contains($0) }
     }
 
     private func row(_ scope: SidebarScope) -> some View {
@@ -37,6 +51,7 @@ struct SidebarView: View {
             highlightsCount: scope == .review || scope == .failed
         )
         .tag(scope)
+        .clickable()
     }
 
     /// Categories get their own symbol; everything else uses the scope's default.

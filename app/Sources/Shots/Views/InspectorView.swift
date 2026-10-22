@@ -1,8 +1,8 @@
 import ShotsKit
 import SwiftUI
 
-/// Details and actions for one shot: preview, category picker, re-run buttons, tags,
-/// metadata, OCR text, and file buttons.
+/// Details and actions for one shot: preview, title, action tiles, category and re-run menus,
+/// review suggestion, tags, metadata, and OCR text.
 struct InspectorView: View {
     @Environment(AppModel.self) private var model
     let shot: Shot
@@ -11,7 +11,7 @@ struct InspectorView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 14) {
                 ThumbnailView(url: shot.fileURL, maxSize: 480)
                     .frame(maxWidth: .infinity)
                     .draggable(shot.fileURL)
@@ -20,13 +20,13 @@ struct InspectorView: View {
                     .font(.title3.bold())
                     .textSelection(.enabled)
 
-                categorySection
+                ActionTiles(shot: shot)
+
+                classificationMenus
 
                 if shot.needsReview, let suggestion = shot.suggestedCategory {
                     suggestionCallout(suggestion)
                 }
-
-                rerunSection
 
                 if !shot.tags.isEmpty {
                     TagChipsView(tags: shot.tags)
@@ -39,9 +39,6 @@ struct InspectorView: View {
                     Divider()
                     ocrSection
                 }
-
-                Divider()
-                fileButtons
             }
             .padding()
         }
@@ -49,12 +46,36 @@ struct InspectorView: View {
 
     // MARK: - Sections
 
-    private var categorySection: some View {
-        HStack {
-            Picker("Category", selection: categoryBinding) {
-                ForEach(pickerCategories, id: \.self) { Text($0).tag($0) }
+    /// Category and re-run as two compact menus on one row; the shot's current category is
+    /// checked. Choosing either moves the file, so both lock while a recat runs.
+    private var classificationMenus: some View {
+        HStack(spacing: 8) {
+            Menu {
+                Picker("Category", selection: categoryBinding) {
+                    ForEach(pickerCategories, id: \.self) { Text($0).tag($0) }
+                }
+                .pickerStyle(.inline)
+                .labelsHidden()
+            } label: {
+                Text(shot.category)
             }
+            .fixedSize()
+            .clickable()
+
+            Menu {
+                ForEach(ClassifierBackend.rerunnable) { backend in
+                    Button(backend.displayName) {
+                        Task { await model.rerun(shot, backend: backend) }
+                    }
+                }
+            } label: {
+                Label("Re-run", systemImage: "arrow.clockwise")
+            }
+            .fixedSize()
+            .clickable()
+
             if isBusy { ProgressView().controlSize(.small) }
+            Spacer(minLength: 0)
         }
         .disabled(isBusy)
     }
@@ -70,27 +91,11 @@ struct InspectorView: View {
             Button("Accept") {
                 Task { await model.recategorize(shot, to: suggestion) }
             }
+            .clickable()
             .disabled(isBusy)
         }
         .padding(10)
         .background(.orange.opacity(0.15), in: .rect(cornerRadius: 8))
-    }
-
-    private var rerunSection: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Re-run with")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            HStack {
-                ForEach(ClassifierBackend.rerunnable) { backend in
-                    Button(backend.displayName) {
-                        Task { await model.rerun(shot, backend: backend) }
-                    }
-                }
-                if isBusy { ProgressView().controlSize(.small) }
-            }
-            .disabled(isBusy)
-        }
     }
 
     private var ocrSection: some View {
@@ -110,22 +115,9 @@ struct InspectorView: View {
         }
     }
 
-    private var fileButtons: some View {
-        let buttons = Group {
-            Button("Quick Look", systemImage: "eye") { model.quickLook(shot) }
-            Button("Reveal", systemImage: "folder") { model.revealInFinder(shot) }
-            Button("Open", systemImage: "arrow.up.forward.app") { model.open(shot) }
-            Button("Copy", systemImage: "doc.on.doc") { model.copyImage(shot) }
-        }
-        return LazyVGrid(columns: [GridItem(.adaptive(minimum: 120))], alignment: .leading) {
-            buttons
-        }
-        .controlSize(.small)
-    }
-
     // MARK: - Category helpers
 
-    /// Reads the shot's category; writing it asks the CLI to move the file.
+    /// Reads the shot's category; writing it re-files the shot.
     private var categoryBinding: Binding<String> {
         Binding(
             get: { shot.category },
@@ -138,6 +130,60 @@ struct InspectorView: View {
     /// Configured categories, plus this shot's own if it isn't one of them.
     private var pickerCategories: [String] {
         model.categories.contains(shot.category) ? model.categories : model.categories + [shot.category]
+    }
+}
+
+/// Copy, Quick Look, Reveal, Open as four equal tiles. Copy flips to "Copied" for a moment.
+private struct ActionTiles: View {
+    @Environment(AppModel.self) private var model
+    let shot: Shot
+    @State private var copied = false
+
+    var body: some View {
+        HStack(spacing: 8) {
+            tile(copied ? "Copied" : "Copy", copied ? "checkmark" : "doc.on.doc") {
+                model.copyImage(shot)
+                copied = true
+                Task {
+                    try? await Task.sleep(for: .seconds(1.2))
+                    copied = false
+                }
+            }
+            tile("Quick Look", "eye") { model.quickLook(shot) }
+            tile("Reveal", "folder") { model.revealInFinder(shot) }
+            tile("Open", "arrow.up.forward.app") { model.open(shot) }
+        }
+        .disabled(!shot.fileExists)
+    }
+
+    private func tile(_ title: String, _ systemImage: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            VStack(spacing: 4) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 15, weight: .medium))
+                    .contentTransition(.symbolEffect(.replace))
+                Text(title)
+                    .font(.caption)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 50)
+            .contentShape(.rect)
+        }
+        .buttonStyle(TileButtonStyle())
+        .clickable()
+    }
+}
+
+/// A filled tile that darkens while pressed.
+private struct TileButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .foregroundStyle(isEnabled ? .primary : .tertiary)
+            .background(.quaternary.opacity(configuration.isPressed ? 1 : 0.6), in: .rect(cornerRadius: 8))
     }
 }
 

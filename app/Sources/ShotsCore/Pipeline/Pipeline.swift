@@ -99,7 +99,9 @@ private struct Skip: Error {
 /// stable wait, sha256 dedupe (and skipped-sha memory), screenshot check, OCR, privacy
 /// verdict, chain, row insert, then move (row deleted if the move fails), Finder tags and
 /// clipboard (best effort). Never throws; failures leave the file in the inbox.
-public func processJob(_ jobId: Int64, deps: Deps) async -> JobResult {
+///
+/// `onEvent` hears about live arrivals only (see `CaptureEvent`), synchronously and in order.
+public func processJob(_ jobId: Int64, deps: Deps, onEvent: (CaptureEvent) -> Void = { _ in }) async -> JobResult {
     let config = deps.config, db = deps.database, native = deps.native, log = deps.log
 
     let job: JobRow
@@ -110,6 +112,11 @@ public func processJob(_ jobId: Int64, deps: Deps) async -> JobResult {
         return .failed(error: errorMessage(error), retry: false)
     }
     let path = job.inboxPath
+    // A screenshot that just landed: it has live context and this is its first attempt.
+    // Only these are copied and reported, so a retry or a startup scan never overwrites
+    // whatever you've copied since, or pops up a preview for an old file.
+    let isLiveArrival = job.context != nil && job.attempts == 1
+    var reportedLanding = false
 
     do {
         try await Files.waitForStable(path, options: deps.stableOptions)
@@ -126,10 +133,10 @@ public func processJob(_ jobId: Int64, deps: Deps) async -> JobResult {
             throw Skip(reason: "not a screen capture (metadata source: \(meta.source.rawValue))", sha256: sha)
         }
         // Copy now, not after filing: classifying can take 10 s and you want to paste right away.
-        // Only for a screenshot that just landed (it has live context, first attempt), so a retry
-        // or a startup scan never overwrites whatever you've copied since.
-        if config.copyToClipboard && job.context != nil && job.attempts == 1 {
-            await copyToClipboard(path, deps: deps)
+        if isLiveArrival {
+            let copied = config.copyToClipboard ? await copyToClipboard(path, deps: deps) : false
+            onEvent(.landed(jobID: job.id, path: path, copied: copied))
+            reportedLanding = true
         }
 
         let ocr = try await native.ocr(path, languages: config.ocrLanguages)
@@ -180,6 +187,7 @@ public func processJob(_ jobId: Int64, deps: Deps) async -> JobResult {
             }
         })
         log.info("filed", fields)
+        if reportedLanding { onEvent(.filed(jobID: job.id, shot: shot)) }
         return .done(shot)
     } catch let skip as Skip {
         do {
@@ -190,7 +198,9 @@ public func processJob(_ jobId: Int64, deps: Deps) async -> JobResult {
         log.info("skipped", ["path": .string(path), "reason": .string(skip.reason)])
         return .skipped(reason: skip.reason)
     } catch {
-        return await fail(job, errorMessage(error), deps: deps)
+        let result = await fail(job, errorMessage(error), deps: deps)
+        if reportedLanding { onEvent(.failed(jobID: job.id, error: errorMessage(error))) }
+        return result
     }
 }
 
@@ -243,12 +253,15 @@ private func applyTags(_ dest: String, tags: [String], remove: [String], deps: D
     }
 }
 
-/// Best-effort. The pasteboard gets the image data, so moving the file afterwards is fine.
-private func copyToClipboard(_ path: String, deps: Deps) async {
+/// Best-effort; true when it worked. The pasteboard gets the image data, so moving the file
+/// afterwards is fine.
+private func copyToClipboard(_ path: String, deps: Deps) async -> Bool {
     do {
         try await deps.native.copyToClipboard(path)
+        return true
     } catch {
         deps.log.warn("clipboard copy failed", ["path": .string(path), "error": .string(errorMessage(error))])
+        return false
     }
 }
 

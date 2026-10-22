@@ -6,6 +6,8 @@ import SwiftUI
 struct ShotsApp: App {
     // One model for the whole app, shared by the windows and the menu bar.
     @State private var model: AppModel
+    /// Kept for the app's lifetime; it shows its own panels.
+    @State private var capturePreviews: CapturePreviewController
     @NSApplicationDelegateAdaptor private var appDelegate: AppDelegate
 
     init() {
@@ -14,8 +16,11 @@ struct ShotsApp: App {
         // run while no window is open.
         model.start()
         ActivationPolicy.shared.start()
+        let capturePreviews = CapturePreviewController(model: model)
+        capturePreviews.start()
         AppDelegate.beforeQuit = { await model.daemon.shutdown() }
         _model = State(initialValue: model)
+        _capturePreviews = State(initialValue: capturePreviews)
     }
 
     var body: some Scene {
@@ -86,7 +91,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Double-clicking the app (or clicking it in Spotlight) while it's already running.
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
-        if !hasVisibleWindows { Self.openMainWindow?() }
+        // `hasVisibleWindows` counts a capture preview, which shouldn't stop the window opening.
+        let windowOpen = sender.windows.contains { $0.isVisible && ActivationPolicy.isContentWindow($0) }
+        if !windowOpen { Self.openMainWindow?() }
         return true
     }
 

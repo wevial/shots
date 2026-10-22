@@ -33,6 +33,8 @@ public final class DaemonController {
     @ObservationIgnored private var deps: Deps?
     @ObservationIgnored private var daemon: Daemon?
     @ObservationIgnored private var activityTask: Task<Void, Never>?
+    /// Outlives each `Daemon`, which `load()` replaces, so readers never have to resubscribe.
+    @ObservationIgnored private let captures = Broadcast<CaptureEvent>()
 
     private static let pausedKey = "watchingPaused"
 
@@ -46,6 +48,12 @@ public final class DaemonController {
         self.native = native
         self.defaults = defaults
         self.log = log
+    }
+
+    /// What happens to each screenshot as it lands, for the "just captured" preview. Live
+    /// arrivals only (see `CaptureEvent`); keeps going across reloads, pauses and restarts.
+    public func captureEvents() -> AsyncStream<CaptureEvent> {
+        captures.stream()
     }
 
     // MARK: Lifecycle
@@ -105,7 +113,7 @@ public final class DaemonController {
 
     private func startWatching() async {
         guard let deps, daemon == nil else { return }
-        let daemon = Daemon(deps: deps)
+        let daemon = Daemon(deps: deps, onCapture: { [captures] event in captures.yield(event) })
         do {
             try await daemon.start()
         } catch {

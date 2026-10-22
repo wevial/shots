@@ -19,8 +19,10 @@ struct LaunchAtLoginBanner: View {
             }
             Spacer()
             Button("Not Now") { model.loginItem.markOffered() }
+                .clickable()
             Button("Launch at Login") { model.loginItem.setOn(true) }
                 .buttonStyle(.borderedProminent)
+                .clickable()
         }
         .padding(12)
         .background(.bar)

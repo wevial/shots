@@ -56,6 +56,7 @@ private struct FailedJobRow: View {
             }
             .labelStyle(.iconOnly)
             .buttonStyle(.borderless)
+            .clickable()
             .disabled(!job.fileExists)
         }
         .padding(.vertical, 4)

@@ -22,6 +22,7 @@ struct ShotGridView: View {
                 ForEach(model.shots) { shot in
                     ShotCardView(shot: shot, isSelected: shot.id == model.selectedShotID)
                         .onTapGesture { model.selectedShotID = shot.id }
+                        .clickable()
                         .draggable(shot.fileURL)
                         .contextMenu { contextMenu(for: shot) }
                 }

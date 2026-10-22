@@ -20,6 +20,12 @@ private func drop(_ fixture: String, into dir: String, as name: String) throws -
     return dest
 }
 
+/// `start()` runs its first scan in the background. A file dropped before that scan looks is
+/// found by it, without live context, so it isn't a live arrival.
+private func afterStartupScan() async throws {
+    try await Task.sleep(for: .milliseconds(200))
+}
+
 private func inboxFiles(_ deps: Deps) throws -> [String] {
     try FileManager.default.contentsOfDirectory(atPath: deps.config.inbox)
 }
@@ -205,6 +211,60 @@ private func inboxFiles(_ deps: Deps) throws -> [String] {
         }
         #expect(filed?.originalName == "Screenshot streamed.png")
         await daemon.stop()
+    }
+
+    @Test func liveArrivalEmitsLandedThenFiled() async throws {
+        let root = try tempRoot()
+        let deps = try testDeps(root, backends: [MockBackend("apple", [ok("code", 0.9)])], native: FakeNative())
+        let recorder = EventRecorder()
+        let daemon = Daemon(deps: deps, onCapture: recorder.record)
+        try await daemon.start()
+        try await afterStartupScan()
+        let src = try drop("code.png", into: deps.config.inbox, as: "Screenshot live.png")
+        try await until { recorder.events.count == 2 }
+        await daemon.stop()
+        guard case .landed(let jobID, let path, let copied) = recorder.events[0],
+              case .filed(let filedID, let shot) = recorder.events[1] else {
+            Issue.record("expected landed then filed, got \(recorder.events)"); return
+        }
+        #expect(path == src)
+        #expect(copied)
+        #expect(filedID == jobID)
+        #expect(shot.originalName == "Screenshot live.png")
+    }
+
+    @Test func startupScanAndRetriesEmitNothing() async throws {
+        let root = try tempRoot()
+        let backend = MockBackend("apple", [ok("receipts", 0.9)])
+        let deps = try testDeps(root, backends: [backend], native: FakeNative())
+        try drop("receipt.png", into: deps.config.inbox, as: "Screenshot old.png")
+        let recorder = EventRecorder()
+        let daemon = Daemon(deps: deps, onCapture: recorder.record)
+        try await daemon.start()
+        try await until { filed(Paths.join(deps.config.outputRoot, "receipts")).count == 1 }
+        await daemon.stop()
+        #expect(recorder.events.isEmpty)
+    }
+
+    @Test func liveFailureEmitsFailedAndItsRetryStaysQuiet() async throws {
+        let root = try tempRoot()
+        let backend = MockBackend("apple", [fail(.error, "down"), ok("code", 0.9)])
+        let deps = try testDeps(root, backends: [backend], native: FakeNative())
+        let recorder = EventRecorder()
+        let daemon = Daemon(deps: deps, onCapture: recorder.record)
+        try await daemon.start()
+        try await afterStartupScan()
+        try drop("code.png", into: deps.config.inbox, as: "Screenshot flaky.png")
+        // The retry (after retryDelayMs) files it.
+        try await until { filed(Paths.join(deps.config.outputRoot, "code")).count == 1 }
+        await daemon.stop()
+        #expect(backend.calls.count == 2)
+        guard recorder.events.count == 2, case .landed(let jobID, _, _) = recorder.events[0],
+              case .failed(let failedID, let error) = recorder.events[1] else {
+            Issue.record("expected landed then failed, got \(recorder.events)"); return
+        }
+        #expect(failedID == jobID)
+        #expect(error.contains("all backends failed"))
     }
 
     @Test func stopLeavesQueuedJobsPendingForTheNextStart() async throws {

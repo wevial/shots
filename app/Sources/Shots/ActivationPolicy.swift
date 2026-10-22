@@ -32,8 +32,8 @@ final class ActivationPolicy {
         NSApp.activate()
     }
 
-    /// The menu bar item's own window and panels don't count.
-    private static func isContentWindow(_ window: NSWindow) -> Bool {
+    /// The menu bar item's own window and panels, such as the capture previews, don't count.
+    static func isContentWindow(_ window: NSWindow) -> Bool {
         !(window is NSPanel) && window.canBecomeMain && window.styleMask.contains(.titled)
     }
 }

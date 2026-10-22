@@ -27,6 +27,7 @@ BIN_DIR="$(swift build --package-path "$PKG" -c release --show-bin-path)"
 echo "==> assembling $APP"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Helpers" "$APP/Contents/Resources"
+cp "$ROOT/app/Resources/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
 cp "$BIN_DIR/Shots" "$APP/Contents/MacOS/Shots"
 # Helpers/, not MacOS/: "Shots" and "shots" are the same file on a case-insensitive volume.
 cp "$BIN_DIR/shots-cli" "$APP/Contents/Helpers/shots"
@@ -40,6 +41,7 @@ cat >"$APP/Contents/Info.plist" <<PLIST
   <key>CFBundleName</key><string>Shots</string>
   <key>CFBundleDisplayName</key><string>Shots</string>
   <key>CFBundleExecutable</key><string>Shots</string>
+  <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleShortVersionString</key><string>$VERSION</string>
   <key>CFBundleVersion</key><string>1</string>

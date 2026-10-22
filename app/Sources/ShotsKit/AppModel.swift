@@ -226,14 +226,18 @@ public final class AppModel {
         searchText = ""
         scope = .all
         selectedShotID = shot.id
+        // A shot filed seconds ago may not be in `shots` yet when the scope was already All.
+        scheduleReload()
     }
 
     // MARK: Changing shots (in process, through the daemon's database)
 
     /// Files the shot under `category` by hand. Also how a review is resolved.
-    public func recategorize(_ shot: Shot, to category: String) async {
-        guard category != shot.category || shot.needsReview else { return }
-        await runRecat(on: shot) { daemon in try await daemon.recat(shotID: shot.id, category: category) }
+    /// Returns the moved shot, or nil when nothing changed or it failed (see `lastError`).
+    @discardableResult
+    public func recategorize(_ shot: Shot, to category: String) async -> Shot? {
+        guard category != shot.category || shot.needsReview else { return nil }
+        return await runRecat(on: shot) { daemon in try await daemon.recat(shotID: shot.id, category: category) }
     }
 
     /// Classifies the shot again with one backend.
@@ -241,12 +245,13 @@ public final class AppModel {
         await runRecat(on: shot) { daemon in try await daemon.recat(shotID: shot.id, backend: backend) }
     }
 
-    private func runRecat(on shot: Shot, _ command: (DaemonController) async throws -> RecatResult) async {
+    @discardableResult
+    private func runRecat(on shot: Shot, _ command: (DaemonController) async throws -> RecatResult) async -> Shot? {
         guard daemon.state != .idle else {
             lastError = "The screenshot engine isn't running, so screenshots can't be changed."
-            return
+            return nil
         }
-        guard !recategorizing.contains(shot.id) else { return }
+        guard !recategorizing.contains(shot.id) else { return nil }
         recategorizing.insert(shot.id)
         defer { recategorizing.remove(shot.id) }
 
@@ -255,8 +260,10 @@ public final class AppModel {
             // Show the new title/category/path right away; the reload below catches the rest.
             replace(result.shot)
             await reload()
+            return result.shot
         } catch {
             lastError = error.localizedDescription
+            return nil
         }
     }
 

@@ -6,6 +6,7 @@ import SwiftUI
 struct MenuBarContent: View {
     @Environment(AppModel.self) private var model
     @Environment(\.openWindow) private var openWindow
+    @AppStorage(CapturePreviewController.enabledKey) private var showsCapturePreview = true
 
     var body: some View {
         Text(model.statusLine)
@@ -44,6 +45,8 @@ struct MenuBarContent: View {
         Divider()
 
         Button("Open Inbox Folder") { model.openInbox() }
+
+        Toggle("Show Preview After Capture", isOn: $showsCapturePreview)
 
         Toggle("Launch at Login", isOn: Binding(
             get: { model.loginItem.isOn },

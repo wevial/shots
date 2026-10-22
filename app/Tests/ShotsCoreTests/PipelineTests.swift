@@ -122,6 +122,62 @@ private func filedShot(_ result: JobResult) throws -> ShotRow {
         #expect(native.clipboard == [src]) // the retry didn't copy again
     }
 
+    @Test func liveArrivalReportsLandedThenFiled() async throws {
+        let root = try tempRoot()
+        let native = FakeNative()
+        let deps = try testDeps(root, backends: [MockBackend("apple", [ok("code", 0.9)])], native: native)
+        let src = try Fixtures.drop("code.png", into: deps.config.inbox, as: name)
+        let job = try await deps.database.createJob(path: src, originalName: name, context: appContext())
+        let recorder = EventRecorder()
+        let shot = try filedShot(await processJob(job.id, deps: deps, onEvent: recorder.record))
+        #expect(recorder.events == [.landed(jobID: job.id, path: src, copied: true), .filed(jobID: job.id, shot: shot)])
+    }
+
+    @Test func landedSaysNotCopiedWhenCopyingIsOff() async throws {
+        let root = try tempRoot()
+        let native = FakeNative()
+        let deps = try testDeps(root, backends: [MockBackend("apple", [ok("code", 0.9)])], native: native, ["copyToClipboard": false])
+        let src = try Fixtures.drop("code.png", into: deps.config.inbox, as: name)
+        let job = try await deps.database.createJob(path: src, originalName: name, context: appContext())
+        let recorder = EventRecorder()
+        _ = await processJob(job.id, deps: deps, onEvent: recorder.record)
+        #expect(native.clipboard.isEmpty)
+        #expect(recorder.events.first == .landed(jobID: job.id, path: src, copied: false))
+    }
+
+    @Test func liveFailureReportsFailedAndTheRetryReportsNothing() async throws {
+        let root = try tempRoot()
+        let deps = try testDeps(root, backends: [MockBackend("apple", [fail(.error, "down"), ok("code", 0.9)])], native: FakeNative())
+        let src = try Fixtures.drop("code.png", into: deps.config.inbox, as: name)
+        let job = try await deps.database.createJob(path: src, originalName: name, context: appContext())
+        let recorder = EventRecorder()
+        guard case .failed(let error, _) = await processJob(job.id, deps: deps, onEvent: recorder.record) else {
+            Issue.record("expected failed"); return
+        }
+        #expect(recorder.events == [.landed(jobID: job.id, path: src, copied: true), .failed(jobID: job.id, error: error)])
+
+        try await deps.database.requeueJob(job.id)
+        _ = try filedShot(await processJob(job.id, deps: deps, onEvent: recorder.record))
+        #expect(recorder.events.count == 2)
+    }
+
+    @Test func scannedFilesAndSkipsReportNothing() async throws {
+        let root = try tempRoot()
+        let deps = try testDeps(root, backends: [MockBackend("apple", [ok("code", 0.9)])], native: FakeNative())
+        let recorder = EventRecorder()
+        // Found by a scan: no context.
+        let scanned = try Fixtures.drop("code.png", into: deps.config.inbox, as: name)
+        let scanJob = try await deps.database.createJob(path: scanned, originalName: name, context: nil)
+        _ = try filedShot(await processJob(scanJob.id, deps: deps, onEvent: recorder.record))
+        // A live duplicate is skipped before it counts as landed.
+        let duplicate = try Fixtures.drop("code.png", into: deps.config.inbox, as: "copy.png")
+        let duplicateJob = try await deps.database.createJob(path: duplicate, originalName: "copy.png", context: appContext())
+        guard case .skipped = await processJob(duplicateJob.id, deps: deps, onEvent: recorder.record) else {
+            Issue.record("expected skipped"); return
+        }
+        #expect(recorder.events.isEmpty)
+    }
+
     @Test func ocrFailureLeavesTheFile() async throws {
         let root = try tempRoot()
         let deps = try testDeps(root, backends: [MockBackend("apple", [ok("code", 0.9)])], native: FakeNative(ocrFails: true))

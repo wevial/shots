@@ -60,6 +60,7 @@ public actor Daemon {
     public nonisolated let queue: AsyncQueue
     private let deps: Deps
     private let rescanInterval: Duration
+    private let onCapture: @Sendable (CaptureEvent) -> Void
 
     private var snapshot: DaemonSnapshot
     private var observers: [UUID: AsyncStream<DaemonSnapshot>.Continuation] = [:]
@@ -75,9 +76,12 @@ public actor Daemon {
     /// Retry timers that came due while paused; they run on `resume()`.
     private var deferredRetries: Set<String> = []
 
-    public init(deps: Deps, rescanInterval: Duration = .seconds(60)) {
+    /// - Parameter onCapture: hears what happens to each live arrival (see `CaptureEvent`).
+    ///   Called from the job's task, in order, so it must be quick and thread-safe.
+    public init(deps: Deps, rescanInterval: Duration = .seconds(60), onCapture: @escaping @Sendable (CaptureEvent) -> Void = { _ in }) {
         self.deps = deps
         self.rescanInterval = rescanInterval
+        self.onCapture = onCapture
         self.queue = AsyncQueue(concurrency: deps.config.concurrency)
         self.snapshot = DaemonSnapshot(inbox: deps.config.inbox)
     }
@@ -334,10 +338,10 @@ public actor Daemon {
     private func enqueue(_ jobId: Int64, _ path: String) async {
         queued += 1
         publish()
-        let deps = deps
+        let deps = deps, onCapture = onCapture
         await queue.push { [self] in
             await jobStarted(path)
-            let result = await processJob(jobId, deps: deps)
+            let result = await processJob(jobId, deps: deps, onEvent: onCapture)
             await jobFinished(path, result)
         }
     }
