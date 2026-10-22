@@ -15,11 +15,11 @@ const USAGE = `shots — auto-organize macOS screenshots
 
   shots run                         watch the inbox (what the LaunchAgent runs)
   shots search <query> [--limit N]  full-text search over OCR, titles, tags, app, URL
-  shots recat <file> [--backend <${BACKEND_NAMES.join("|")}>] [--category <name>]
+  shots recat <file> [--backend <${BACKEND_NAMES.join("|")}>] [--category <name>] [--json]
                                     re-classify and re-file an indexed screenshot
   shots review [--failed]           list low-confidence / unknown-category shots (or failed jobs)
   shots doctor                      check OS, models, CLIs, auth, permissions, config
-  shots config                      print the effective config and its path
+  shots config [--json]             print the effective config and its path
 `;
 
 function makeDeps(cfg: Config): Deps {
@@ -84,7 +84,10 @@ async function main(argv: string[]): Promise<number> {
     }
 
     case "recat": {
-      const { values, positionals } = parseArgs({ args: rest, allowPositionals: true, options: { backend: { type: "string" }, category: { type: "string" } } });
+      const { values, positionals } = parseArgs({
+        args: rest, allowPositionals: true,
+        options: { backend: { type: "string" }, category: { type: "string" }, json: { type: "boolean" } },
+      });
       const ref = positionals[0];
       if (!ref) throw new UsageError("recat needs a file");
       const deps = makeDeps(cfg);
@@ -96,6 +99,11 @@ async function main(argv: string[]): Promise<number> {
         backends = [createBackend(values.backend as BackendName, cfg, helperNative)];
       }
       const { shot: updated, decision } = await recat(shot, { backends, category: values.category }, deps);
+      if (values.json) {
+        // Contract for the Shots.app viewer: { shot: ShotRow, decision: ChainDecision }.
+        console.log(JSON.stringify({ shot: updated, decision }));
+        return 0;
+      }
       console.log(`${short(shot.path)}\n  → ${short(updated.path)}`);
       console.log(`  ${decision.final.category} (${decision.final.confidence.toFixed(2)} via ${decision.backend})${decision.review ? `, review (suggested: ${decision.suggestedCategory ?? "none"})` : ""}`);
       for (const a of decision.attempts) console.log(`  ${a.backend}: ${a.outcome.ok ? `ok ${a.outcome.result.category} ${a.outcome.result.confidence}` : `${a.outcome.kind}: ${a.outcome.message}`} (${a.ms}ms)`);
@@ -128,6 +136,10 @@ async function main(argv: string[]): Promise<number> {
     }
 
     case "config":
+      if (rest.includes("--json")) {
+        console.log(JSON.stringify({ path: configPath(), dbPath: join(cfg.dataDir, "shots.db"), config: cfg }));
+        return 0;
+      }
       console.log(`# ${configPath()}`);
       console.log(JSON.stringify(cfg, null, 2));
       return 0;

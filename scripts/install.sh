@@ -69,7 +69,16 @@ plutil -lint "$PLIST" >/dev/null
 
 echo "→ (re)loading $LABEL"
 launchctl bootout "$DOMAIN/$LABEL" 2>/dev/null || true
-launchctl bootstrap "$DOMAIN" "$PLIST"
+# bootout returns before the service is gone; bootstrapping too early fails with EIO (exit 5).
+for _ in $(seq 1 50); do
+  launchctl print "$DOMAIN/$LABEL" >/dev/null 2>&1 || break
+  sleep 0.1
+done
+for attempt in 1 2 3; do
+  launchctl bootstrap "$DOMAIN" "$PLIST" && break
+  [ "$attempt" = 3 ] && { echo "launchctl bootstrap failed" >&2; exit 1; }
+  sleep 1
+done
 launchctl kickstart -k "$DOMAIN/$LABEL" >/dev/null
 
 INBOX="$("$BIN_DIR/shots" config | sed -n 's/^  "inbox": "\(.*\)",$/\1/p')"
