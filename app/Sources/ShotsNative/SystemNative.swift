@@ -1,7 +1,7 @@
 import Foundation
 import ShotsCore
 
-/// The real `Native`: macOS services, called in process. Ported from native/Sources/shots-helper.
+/// The real `Native`: macOS services, called in process. Formerly the separate shots-helper binary.
 public struct SystemNative: Native {
     public init() {}
 

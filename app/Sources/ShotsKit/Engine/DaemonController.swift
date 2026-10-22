@@ -36,7 +36,13 @@ public final class DaemonController {
 
     private static let pausedKey = "watchingPaused"
 
-    public init(native: any Native = SystemNative(), defaults: UserDefaults = .standard, log: Logger = Logger()) {
+    public static let logPath = NSHomeDirectory() + "/Library/Logs/shots/shots.log"
+
+    public init(
+        native: any Native = SystemNative(),
+        defaults: UserDefaults = .standard,
+        log: Logger = Logger(sink: Logger.file(at: DaemonController.logPath))
+    ) {
         self.native = native
         self.defaults = defaults
         self.log = log

@@ -2,7 +2,7 @@ import Foundation
 import SQLite3
 @testable import ShotsKit
 
-/// A throwaway database with the daemon's schema (from src/db.ts), written through its own
+/// A throwaway database with a copy of the daemon's schema, written through its own
 /// read-write connection the way the daemon would.
 final class TestDatabase {
     let path: String

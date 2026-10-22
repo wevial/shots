@@ -1,7 +1,3 @@
-node_modules/
-dist/
-native/.build/
 *.log
-*.bun-build
 app/.build*/
 app/build/

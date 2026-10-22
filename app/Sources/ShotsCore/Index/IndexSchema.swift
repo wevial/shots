@@ -1,6 +1,6 @@
-/// The index schema, copied verbatim from src/db.ts so the Swift and TypeScript daemons
-/// open the same database. Everything is `if not exists`, so running it on an existing
-/// index changes nothing. Change it in both places or not at all.
+/// The index schema, copied verbatim from the original TypeScript daemon (src/db.ts, now in
+/// git history) so indexes it created keep working. Everything is `if not exists`, so running
+/// it on an existing index changes nothing.
 enum Schema {
     static let sql = """
     create table if not exists jobs (

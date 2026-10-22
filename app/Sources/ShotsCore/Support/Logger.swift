@@ -2,8 +2,8 @@ import Foundation
 
 /// JSON-lines logging, one object per line: `{"t":…,"level":…,"msg":…, …fields}`.
 ///
-/// Info and debug go to stdout, warnings and errors to stderr, which is how the old
-/// LaunchAgent split them into ~/Library/Logs/shots. The app can pass its own `sink`.
+/// By default info and debug go to stdout and warnings and errors to stderr (the CLI).
+/// The app logs to ~/Library/Logs/shots/shots.log through `Logger.file(at:)`.
 public struct Logger: Sendable {
     public enum Level: String, Sendable, Comparable, CaseIterable {
         case debug, info, warn, error
@@ -49,5 +49,25 @@ public struct Logger: Sendable {
     private static let standardStreams: Sink = { level, line in
         let handle: FileHandle = level >= .warn ? .standardError : .standardOutput
         handle.write(Data((line + "\n").utf8))
+    }
+
+    /// Appends every level to one file, for the app: a GUI app's stdout goes nowhere.
+    /// Rolls the file to `<name>.1` when it passes `maxBytes` at startup.
+    /// Touches nothing until the first line, so previews and tests that never log stay clean.
+    public static func file(at path: String, maxBytes: Int = 10 << 20) -> Sink {
+        { _, line in
+            let fm = FileManager.default
+            if let size = try? fm.attributesOfItem(atPath: path)[.size] as? Int, size > maxBytes {
+                try? fm.removeItem(atPath: path + ".1")
+                try? fm.moveItem(atPath: path, toPath: path + ".1")
+            }
+            try? fm.createDirectory(atPath: (path as NSString).deletingLastPathComponent, withIntermediateDirectories: true)
+            // O_APPEND makes each write(2) of one line land whole, even from concurrent tasks.
+            let fd = open(path, O_WRONLY | O_CREAT | O_APPEND, 0o644)
+            guard fd >= 0 else { return }
+            defer { close(fd) }
+            let bytes = Array((line + "\n").utf8)
+            _ = bytes.withUnsafeBufferPointer { write(fd, $0.baseAddress, $0.count) }
+        }
     }
 }

@@ -3,7 +3,7 @@ import Testing
 @testable import ShotsCore
 
 /// The Swift daemon has to take over an index the TypeScript daemon built. fixture.db
-/// (ShotsKitTests/Fixtures, made by src/db.ts's own Store) stands in for that index.
+/// (ShotsKitTests/Fixtures, made by the TypeScript daemon's Store) stands in for that index.
 struct CompatibilityTests {
     private func openFixture() throws -> Database {
         let fixture = URL(filePath: #filePath).deletingLastPathComponent()

@@ -158,7 +158,9 @@ enum Commands {
 
     /// SMAppService only describes the app when this executable sits in Shots.app/Contents/Helpers.
     static func loginItemStatus() -> Doctor.LoginItem {
-        let executable = Bundle.main.executablePath ?? CommandLine.arguments[0]
+        // Usually invoked through the ~/.local/bin/shots symlink, so resolve it first.
+        let executable = URL(fileURLWithPath: Bundle.main.executablePath ?? CommandLine.arguments[0])
+            .resolvingSymlinksInPath().path
         guard let range = executable.range(of: ".app/Contents/Helpers/") else {
             return Doctor.LoginItem(ok: false, detail: "Shots.app is not installed (this shots is not running from inside the bundle)")
         }
@@ -168,7 +170,7 @@ enum Commands {
         }
         // mainApp refers to the *calling* app, so from the helper we can only report that the
         // bundle exists; the app's own login-item state is shown in its Settings.
-        return Doctor.LoginItem(ok: nil, detail: "Shots.app at \(short(bundleURL.path)); toggle \"Open at login\" in its settings")
+        return Doctor.LoginItem(ok: nil, detail: "Shots.app at \(short(bundleURL.path)); toggle \"Launch at Login\" in its menu or Status window")
     }
 
     /// Wraps a native check so a failure becomes `{error}` in daemon-status.json.

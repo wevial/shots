@@ -4,7 +4,7 @@ import Testing
 @testable import ShotsCore
 
 // Shared test helpers, ported from test/helpers.ts: a scripted backend, a fake `Native`,
-// temp folders, and the PNG fixtures (copied from test/fixtures).
+// temp folders, and the PNG fixtures (regenerate with: swift Fixtures/make-fixtures.swift Fixtures).
 
 enum Fixtures {
     static let directory = URL(filePath: #filePath).deletingLastPathComponent().appending(path: "Fixtures").path
