@@ -26,7 +26,7 @@ struct LaunchAtLoginBanner: View {
         }
         .padding(12)
         .background(.bar)
-        .overlay(alignment: .bottom) { Divider() }
+        .overlay(alignment: .bottom) { Rectangle().fill(.separator).frame(height: 1) }
     }
 }
 

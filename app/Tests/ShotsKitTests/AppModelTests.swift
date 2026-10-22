@@ -21,6 +21,20 @@ struct AppModelTests {
         #expect(model.shots.map(\.id) == [2])
     }
 
+    @Test func searchAllShotsIgnoresTheScopeAndSearchField() async throws {
+        let db = try TestDatabase()
+        try db.insertShot(id: 1, category: "code", title: "Checkout error", capturedAt: "2026-10-20T10:00:00.000Z")
+        try db.insertShot(id: 2, category: "receipts", title: "Checkout receipt", capturedAt: "2026-10-21T10:00:00.000Z")
+        try db.insertShot(id: 3, category: "code", title: "Unrelated", capturedAt: "2026-10-22T10:00:00.000Z")
+        let model = AppModel(config: .sample, store: try ShotStore(path: db.path))
+        model.scope = .category("code")
+        model.searchText = "unrelated"
+
+        #expect(Set(await model.searchAllShots("checkout", limit: 6).map(\.id)) == [1, 2])
+        #expect(await model.searchAllShots("checkout", limit: 1).count == 1)
+        #expect(await model.searchAllShots("  ", limit: 6).isEmpty)
+    }
+
     @Test func recatWithoutCLIReportsAnError() async {
         let model = AppModel.preview()
         await model.recategorize(.sample, to: "code")

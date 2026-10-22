@@ -230,6 +230,13 @@ public final class AppModel {
         scheduleReload()
     }
 
+    /// The best `limit` full-text matches for `query` in every scope, whatever the sidebar
+    /// shows. Empty when there's nothing to search for or no index. For the command palette.
+    public func searchAllShots(_ query: String, limit: Int) async -> [Shot] {
+        guard let store, FTSQuery.build(query) != nil else { return [] }
+        return (try? await store.shots(in: .all, matching: query, limit: limit)) ?? []
+    }
+
     // MARK: Changing shots (in process, through the daemon's database)
 
     /// Files the shot under `category` by hand. Also how a review is resolved.

@@ -31,7 +31,8 @@ struct SidebarView: View {
                 }
             }
         }
-        .navigationSplitViewColumnWidth(min: 180, ideal: 210, max: 280)
+        // Below ~200 pt the section header and More's chevron get clipped.
+        .navigationSplitViewColumnWidth(min: 205, ideal: 215, max: 280)
     }
 
     /// Categories that hold screenshots, plus the selected one so the selection never vanishes.

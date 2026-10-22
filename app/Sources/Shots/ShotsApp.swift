@@ -38,6 +38,7 @@ struct ShotsApp: App {
                     .keyboardShortcut("r")
             }
             StatusCommand()
+            ShotsCommands(model: model)
         }
 
         Window("Shots Status", id: "status") {

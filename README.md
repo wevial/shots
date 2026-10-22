@@ -82,7 +82,7 @@ The app records what it actually has in `~/.local/share/shots/daemon-status.json
 - **Sidebar:** All, Needs Review, Failed, then the categories that hold screenshots; empty ones fold under More.
 - **Grid:** thumbnails, newest first, with full-text search over OCR text, titles, tags, app, window and URL. Hovering a card shows a Copy strip along the bottom of its image.
 - **Inspector:** preview, title, then Copy / Quick Look / Reveal / Open tiles, a category menu and a Re-run menu (Apple/Claude/Codex), a one-click accept for a suggested category, tags, metadata, OCR text.
-- **Shortcuts:** Space for Quick Look, drag a card out to another app, right-click to move, re-run, reveal or copy.
+- **Keyboard:** ⌘K command palette (actions on the selection, go to any scope, app commands, and full-text jump to any screenshot); ⌘F search, ↓ or Return to the results, Esc to clear; arrow keys move through the grid; Space Quick Look; Return opens; ⌘C copies the image; Esc deselects; ⌘1–⌘9 jump to sidebar rows; ⌥⌘I toggles the inspector; Tab moves between panes. Drag a card out to another app, or right-click to move, re-run, reveal or copy.
 - **Menu bar:** watching status, Pause/Resume, the review count, recent screenshots, Open Inbox Folder, Show Preview After Capture, Status & Permissions.
 
 The app icon is drawn by `app/Resources/make-icon.swift`; re-run it (`swift app/Resources/make-icon.swift app/Resources`) after changing the drawing.

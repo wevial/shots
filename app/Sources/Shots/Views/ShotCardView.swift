@@ -98,7 +98,10 @@ private struct CopyStrip: View {
                 .frame(height: 30)
                 // Opaque: a material lets the screenshot underneath show through the label.
                 .background(Color(nsColor: .controlBackgroundColor))
-                .overlay(alignment: .top) { Divider() }
+                // A plain hairline: a Divider outside a stack draws vertically, down the middle.
+                .overlay(alignment: .top) {
+                    Rectangle().fill(.separator).frame(height: 1)
+                }
                 .contentShape(.rect)
         }
         .buttonStyle(.plain)
