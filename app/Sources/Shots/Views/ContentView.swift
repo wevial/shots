@@ -40,6 +40,10 @@ struct ContentView: View {
                 // inspector stopped the window from shrinking and the sidebar got clipped.
                 .inspector(isPresented: $window.showsInspector) {
                     inspector
+                        // A fixed ideal width: otherwise the column follows its content's, which
+                        // for a selected shot (long OCR lines, URLs) is far wider than "No Selection",
+                        // so the inspector jumped wider on every selection.
+                        .frame(minWidth: 0, idealWidth: 320, maxWidth: .infinity)
                         .inspectorColumnWidth(min: 260, ideal: 320, max: 480)
                 }
         }

@@ -168,4 +168,6 @@ swift test --package-path app
 scripts/build-app.sh --install
 ```
 
+`scripts/ui-smoke` is a UI smoke test of the installed app driven with real input through [cua-driver](https://github.com/trycua/cua): typing in the search bar, ⌘K from search and from the grid, Esc, ⌘F. It changes no data and restores the search bar, but it sends foreground keys and clicks, so don't use the computer while it runs. `--keep` keeps its screenshots.
+
 The tests use fixture PNGs (`app/Tests/ShotsCoreTests/Fixtures`; regenerate them with `swift make-fixtures.swift .` from that folder), a scripted `MockBackend`, a `FakeNative`, and fake `claude`/`codex` executables. Together they cover the escalation and privacy rules, the retry-on-invalid path, process-group timeouts, filing, deduplication and restart behavior, and the watcher's burst and retry handling. `NativeIntegrationTests` exercise the real Vision OCR, screenshot xattrs, Finder tags and Foundation Models status. `CompatibilityTests` and `FixtureStoreTests` open an index written by the original TypeScript daemon, to prove old indexes still work.
