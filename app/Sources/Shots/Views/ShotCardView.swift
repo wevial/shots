@@ -96,7 +96,8 @@ private struct CopyStrip: View {
                 .contentTransition(.symbolEffect(.replace))
                 .frame(maxWidth: .infinity)
                 .frame(height: 30)
-                .background(.regularMaterial)
+                // Opaque: a material lets the screenshot underneath show through the label.
+                .background(Color(nsColor: .controlBackgroundColor))
                 .overlay(alignment: .top) { Divider() }
                 .contentShape(.rect)
         }

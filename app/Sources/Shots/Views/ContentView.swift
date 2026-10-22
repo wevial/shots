@@ -17,6 +17,8 @@ struct ContentView: View {
         } detail: {
             detail
                 .navigationTitle(model.scope.title)
+                // On the detail column, so the field sits in its toolbar, left of the inspector.
+                .searchable(text: $model.searchText, placement: .toolbarPrincipal, prompt: "Search screenshots")
                 .background { Backdrop() }
                 // Let the backdrop show through the title bar instead of an opaque strip.
                 .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
@@ -26,16 +28,17 @@ struct ContentView: View {
                 LaunchAtLoginBanner()
             }
         }
-        .searchable(text: $model.searchText, prompt: "Search screenshots")
         .inspector(isPresented: $showsInspector) {
             inspector
                 .inspectorColumnWidth(min: 260, ideal: 320, max: 480)
+                // While open, the toggle sits over the inspector, so search keeps the grid's toolbar.
+                .toolbar {
+                    ToolbarItem { inspectorToggle }
+                }
         }
         .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                Button("Inspector", systemImage: "sidebar.trailing") { showsInspector.toggle() }
-                    .help(showsInspector ? "Hide Inspector" : "Show Inspector")
-                    .clickable()
+            if !showsInspector {
+                ToolbarItem(placement: .primaryAction) { inspectorToggle }
             }
         }
         .quickLookPreview($model.quickLookURL)
@@ -45,6 +48,12 @@ struct ContentView: View {
             Text(message)
         }
         .frame(minWidth: 800, minHeight: 500)
+    }
+
+    private var inspectorToggle: some View {
+        Button("Inspector", systemImage: "sidebar.trailing") { showsInspector.toggle() }
+            .help(showsInspector ? "Hide Inspector" : "Show Inspector")
+            .clickable()
     }
 
     @ViewBuilder
