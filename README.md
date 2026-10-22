@@ -64,7 +64,7 @@ security find-identity -v -p codesigning
 
 ## Permissions
 
-All grants go to **Shots.app**. The menu bar's **Status & Permissions…** window shows the live state of each and opens the right System Settings pane.
+All grants go to **Shots.app**. The **Status & Permissions** window (Shots ▸ Status & Permissions…, ⌘,, or the menu bar item) shows the live state of each and opens the right System Settings pane. If the menu bar item is missing, check System Settings → Menu Bar → Allow in the Menu Bar.
 
 | Permission | Needed for | Without it |
 |---|---|---|

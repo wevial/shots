@@ -32,6 +32,7 @@ struct ShotsApp: App {
                 Button("Refresh") { Task { await model.refresh() } }
                     .keyboardShortcut("r")
             }
+            StatusCommand()
         }
 
         Window("Shots Status", id: "status") {
@@ -47,6 +48,22 @@ struct ShotsApp: App {
         } label: {
             MenuBarLabel()
                 .environment(model)
+        }
+    }
+}
+
+/// Shots ▸ Status & Permissions… (⌘,), where macOS apps keep Settings. The menu bar item
+/// opens the same window, but macOS can hide that item, so this is the reliable way in.
+struct StatusCommand: Commands {
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some Commands {
+        CommandGroup(replacing: .appSettings) {
+            Button("Status & Permissions…") {
+                ActivationPolicy.shared.activateForWindow()
+                openWindow(id: "status")
+            }
+            .keyboardShortcut(",")
         }
     }
 }
