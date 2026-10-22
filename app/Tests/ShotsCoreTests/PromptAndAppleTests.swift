@@ -74,22 +74,33 @@ struct AppleBackendTests {
 }
 
 struct AsyncQueueTests {
-    @Test func runsInOrderWithBoundedConcurrency() async throws {
+    @Test func runsWithBoundedConcurrency() async throws {
         let queue = AsyncQueue(concurrency: 2)
         let log = Log()
+        // Paused while pushing, so nothing can finish before all six are counted.
+        await queue.pause()
         for i in 0..<6 {
-            await queue.push {
-                await log.start(i)
-                try? await Task.sleep(for: .milliseconds(20))
-                await log.end()
-            }
+            await queue.push { await log.run(i) }
         }
         #expect(await queue.size == 6)
+        await queue.resume()
         await queue.onIdle()
         #expect(await queue.size == 0)
-        #expect(await log.started == Array(0..<6))
+        // Two jobs start together, so which logs first is up to the scheduler.
+        #expect(await log.started.sorted() == Array(0..<6))
         #expect(await log.maxActive == 2)
         await queue.onIdle() // already idle: returns at once
+    }
+
+    @Test func runsInOrderOneAtATime() async throws {
+        let queue = AsyncQueue(concurrency: 1)
+        let log = Log()
+        for i in 0..<6 {
+            await queue.push { await log.run(i) }
+        }
+        await queue.onIdle()
+        #expect(await log.started == Array(0..<6))
+        #expect(await log.maxActive == 1)
     }
 
     private actor Log {
@@ -102,5 +113,10 @@ struct AsyncQueueTests {
             maxActive = max(maxActive, active)
         }
         func end() { active -= 1 }
+        nonisolated func run(_ i: Int) async {
+            await start(i)
+            try? await Task.sleep(for: .milliseconds(20))
+            await end()
+        }
     }
 }
