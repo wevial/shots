@@ -21,6 +21,9 @@ struct ContentView: View {
             SidebarView()
         } detail: {
             detail
+                // Fill the column whatever it shows: an empty state is only as big as its text,
+                // and the backdrop behind it would otherwise paint just that rectangle.
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .safeAreaInset(edge: .top, spacing: 0) {
                     // Failed jobs aren't searchable, so the field would do nothing there.
                     if model.scope != .failed {
@@ -45,6 +48,9 @@ struct ContentView: View {
                 LaunchAtLoginBanner()
             }
         }
+        // While the palette is up, everything behind it is inert, so the search field or the
+        // grid can't keep (or take back) the keyboard from the palette's field.
+        .disabled(window.showsPalette)
         .overlay {
             if window.showsPalette {
                 CommandPalette(isPresented: $window.showsPalette, showsInspector: $window.showsInspector) {

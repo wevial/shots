@@ -81,10 +81,14 @@ struct CommandPalette: View {
         .font(.title3)
         .padding(.horizontal, 16)
         .frame(height: 52)
-        .onAppear {
+        .defaultFocus($isFieldFocused, true)
+        .task {
+            // onAppear is too early on macOS: the field isn't in the window yet, so the focus
+            // request is dropped. One turn of the run loop later it sticks.
+            await Task.yield()
             isFieldFocused = true
-            lastPointerLocation = NSEvent.mouseLocation
         }
+        .onAppear { lastPointerLocation = NSEvent.mouseLocation }
     }
 
     // MARK: - Results
