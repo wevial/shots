@@ -5,7 +5,17 @@ import SwiftUI
 struct ShotGridView: View {
     @Environment(AppModel.self) private var model
 
-    private let columns = [GridItem(.adaptive(minimum: 180, maximum: 260), spacing: 12)]
+    // Cards keep one size; resizing the window only changes how many fit in a row, and the
+    // cards glide to their new places when that number changes.
+    private static let cardWidth: CGFloat = 220
+    private static let spacing: CGFloat = 12
+    private static let padding: CGFloat = 16
+
+    /// How many fixed-width cards fit across `width`.
+    private static func columnCount(for width: CGFloat) -> Int {
+        let usable = width - 2 * padding + spacing
+        return max(1, Int(usable / (cardWidth + spacing)))
+    }
 
     var body: some View {
         if model.shots.isEmpty {
@@ -16,18 +26,14 @@ struct ShotGridView: View {
     }
 
     private var grid: some View {
-        ScrollView {
-            // Lazy: only cards near the viewport are built, so thousands of shots stay smooth.
-            LazyVGrid(columns: columns, spacing: 12) {
-                ForEach(model.shots) { shot in
-                    ShotCardView(shot: shot, isSelected: shot.id == model.selectedShotID)
-                        .onTapGesture { model.selectedShotID = shot.id }
-                        .clickable()
-                        .draggable(shot.fileURL)
-                        .contextMenu { contextMenu(for: shot) }
-                }
+        // The column count is derived from the width on every layout pass rather than stored:
+        // writing it to @State from a geometry callback re-entered layout and crashed.
+        GeometryReader { proxy in
+            let count = Self.columnCount(for: proxy.size.width)
+            ScrollView {
+                cards(columns: Array(repeating: GridItem(.fixed(Self.cardWidth), spacing: Self.spacing), count: count))
+                    .animation(.smooth(duration: 0.35), value: count)
             }
-            .padding()
         }
         .focusable()
         .focusEffectDisabled()
@@ -37,6 +43,20 @@ struct ShotGridView: View {
             return .handled
         }
         .onTapGesture { model.selectedShotID = nil } // Click on empty space deselects.
+    }
+
+    private func cards(columns: [GridItem]) -> some View {
+        // Lazy: only cards near the viewport are built, so thousands of shots stay smooth.
+        LazyVGrid(columns: columns, spacing: Self.spacing) {
+            ForEach(model.shots) { shot in
+                ShotCardView(shot: shot, isSelected: shot.id == model.selectedShotID)
+                    .onTapGesture { model.selectedShotID = shot.id }
+                    .clickable()
+                    .draggable(shot.fileURL)
+                    .contextMenu { contextMenu(for: shot) }
+            }
+        }
+        .padding(Self.padding)
     }
 
     @ViewBuilder
