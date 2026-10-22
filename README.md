@@ -38,7 +38,7 @@ Shots.app is the only process: it watches the inbox, files screenshots, and hold
 scripts/install.sh
 ```
 
-This builds `Shots.app`, installs it to `~/Applications`, symlinks `~/.local/bin/shots` to the CLI inside it, and launches it. It also removes the old `com.shots.agent` LaunchAgent if that's still around. On first launch the window offers **Launch at Login** (it uses `SMAppService`, so you can turn it off later in the Status window or in System Settings → General → Login Items). Started at login, the app stays in the menu bar. Opened by hand, it shows the window. Logs go to `~/Library/Logs/shots/shots.log`.
+This builds `Shots.app`, installs it to `/Applications`, symlinks `~/.local/bin/shots` to the CLI inside it, and launches it. It also removes the old `com.shots.agent` LaunchAgent if that's still around. On first launch the window offers **Launch at Login** (it uses `SMAppService`, so you can turn it off later in the Status window or in System Settings → General → Login Items). Started at login, the app stays in the menu bar. Opened by hand, it shows the window. Logs go to `~/Library/Logs/shots/shots.log`.
 
 Next, point screenshots at the inbox and turn off the floating thumbnail:
 

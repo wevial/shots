@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Builds Shots.app, installs it to ~/Applications, links the `shots` CLI and launches the app.
+# Builds Shots.app, installs it to /Applications, links the `shots` CLI and launches the app.
 # Re-run after pulling changes. The app itself watches the inbox and offers to start at login.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-APP="$HOME/Applications/Shots.app"
+APP="/Applications/Shots.app"
 LINK="$HOME/.local/bin/shots"
 OLD_LABEL="com.shots.agent"
 

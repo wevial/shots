@@ -29,7 +29,7 @@ private func filedShot(_ result: JobResult) throws -> ShotRow {
         #expect(Paths.dirname(shot.path) == dir)
         #expect(exists(shot.path))
         #expect(native.tags[shot.path] == ["code", "typescript", "config"])
-        #expect(native.clipboard == [shot.path])
+        #expect(native.clipboard == [src]) // copied from the inbox, before filing
         #expect(shot.originalName == name)
         #expect(shot.backend == "apple")
         #expect(shot.appBundleId == "com.microsoft.VSCode")
@@ -107,6 +107,19 @@ private func filedShot(_ result: JobResult) throws -> ShotRow {
         #expect(row.attempts == 1)
         #expect(row.lastError?.contains("all backends failed") == true)
         #expect(!exists(deps.config.outputRoot))
+    }
+
+    @Test func copiesBeforeClassifyingAndOnlyOnTheFirstAttempt() async throws {
+        let root = try tempRoot()
+        let native = FakeNative()
+        let deps = try testDeps(root, backends: [MockBackend("apple", [fail(.error, "down")])], native: native)
+        let src = try Fixtures.drop("code.png", into: deps.config.inbox, as: name)
+        let job = try await deps.database.createJob(path: src, originalName: name, context: appContext())
+        _ = await processJob(job.id, deps: deps)
+        #expect(native.clipboard == [src]) // there even though classification failed
+        try await deps.database.requeueJob(job.id)
+        _ = await processJob(job.id, deps: deps)
+        #expect(native.clipboard == [src]) // the retry didn't copy again
     }
 
     @Test func ocrFailureLeavesTheFile() async throws {
@@ -189,7 +202,7 @@ private func filedShot(_ result: JobResult) throws -> ShotRow {
         #expect(shot.title == "Thing")
         #expect(output.decision.attempts.isEmpty)
         #expect(native.tags[shot.path]?.sorted() == ["alpha", "design"])
-        #expect(native.clipboard == [original.path]) // only the first filing copies
+        #expect(native.clipboard.isEmpty) // no live context, and recat never copies
     }
 
     @Test func unknownCategoryIsAnError() async throws {

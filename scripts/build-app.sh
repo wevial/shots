@@ -2,7 +2,7 @@
 # Builds Shots.app (menu bar app + daemon + bundled `shots` CLI) into app/build/Shots.app.
 # Signed with the first "Apple Development" identity if there is one, otherwise ad-hoc.
 #   scripts/build-app.sh            build only
-#   scripts/build-app.sh --install  also copy it to ~/Applications/Shots.app
+#   scripts/build-app.sh --install  also copy it to /Applications/Shots.app
 # It never launches the app.
 set -euo pipefail
 
@@ -69,11 +69,12 @@ codesign "${SIGN[@]}" "$APP"
 codesign --verify --strict --deep "$APP"
 
 if $install; then
-  dest="$HOME/Applications/Shots.app"
+  dest="/Applications/Shots.app"
   echo "==> installing to $dest"
-  mkdir -p "$HOME/Applications"
   rm -rf "$dest"
   ditto "$APP" "$dest"
+  # Earlier builds went to ~/Applications; two copies would show up twice in Spotlight and Settings.
+  rm -rf "$HOME/Applications/Shots.app"
 fi
 
 echo "done: $APP"

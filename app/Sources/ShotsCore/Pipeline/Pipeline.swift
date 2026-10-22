@@ -125,6 +125,12 @@ public func processJob(_ jobId: Int64, deps: Deps) async -> JobResult {
         if config.requireScreenCapture && meta.isScreenCapture != true {
             throw Skip(reason: "not a screen capture (metadata source: \(meta.source.rawValue))", sha256: sha)
         }
+        // Copy now, not after filing: classifying can take 10 s and you want to paste right away.
+        // Only for a screenshot that just landed (it has live context, first attempt), so a retry
+        // or a startup scan never overwrites whatever you've copied since.
+        if config.copyToClipboard && job.context != nil && job.attempts == 1 {
+            await copyToClipboard(path, deps: deps)
+        }
 
         let ocr = try await native.ocr(path, languages: config.ocrLanguages)
         let context = job.context
@@ -159,7 +165,7 @@ public func processJob(_ jobId: Int64, deps: Deps) async -> JobResult {
             try await db.deleteShot(shot.id)
             throw error
         }
-        await applySideEffects(dest, tags: finderTags(decision), remove: [], deps: deps, clipboard: config.copyToClipboard)
+        await applyTags(dest, tags: finderTags(decision), remove: [], deps: deps)
         try await db.finishJob(job.id, status: .done, sha256: sha, shotId: shot.id)
 
         var fields: JSONObject = [
@@ -228,18 +234,21 @@ private func releaseDestination(_ path: String) {
     _ = reservedDestinations.withLock { $0.remove(path) }
 }
 
-/// Tags and clipboard are best-effort: the file is already filed and indexed.
-private func applySideEffects(_ dest: String, tags: [String], remove: [String], deps: Deps, clipboard: Bool) async {
+/// Best-effort: the file is already filed and indexed.
+private func applyTags(_ dest: String, tags: [String], remove: [String], deps: Deps) async {
     do {
         try await deps.native.setTags(dest, tags, remove: remove)
     } catch {
         deps.log.warn("finder tags failed", ["dest": .string(dest), "error": .string(errorMessage(error))])
     }
-    guard clipboard else { return }
+}
+
+/// Best-effort. The pasteboard gets the image data, so moving the file afterwards is fine.
+private func copyToClipboard(_ path: String, deps: Deps) async {
     do {
-        try await deps.native.copyToClipboard(dest)
+        try await deps.native.copyToClipboard(path)
     } catch {
-        deps.log.warn("clipboard copy failed", ["dest": .string(dest), "error": .string(errorMessage(error))])
+        deps.log.warn("clipboard copy failed", ["path": .string(path), "error": .string(errorMessage(error))])
     }
 }
 
@@ -295,6 +304,6 @@ public func recat(_ shot: ShotRow, options: RecatOptions, deps: Deps) async thro
         tags: decision.final.tags, title: decision.final.title, confidence: decision.final.confidence,
         backend: decision.backend, review: decision.review, attemptsJSON: decision.attemptsJSON
     ))
-    await applySideEffects(dest, tags: finderTags(decision), remove: oldTags, deps: deps, clipboard: false)
+    await applyTags(dest, tags: finderTags(decision), remove: oldTags, deps: deps)
     return RecatOutput(shot: updated, decision: decision)
 }

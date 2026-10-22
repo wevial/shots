@@ -3,7 +3,7 @@
 # Keeps your screenshots, config (~/.config/shots) and index (~/.local/share/shots).
 set -euo pipefail
 
-APP="$HOME/Applications/Shots.app"
+APP="/Applications/Shots.app"
 LINK="$HOME/.local/bin/shots"
 
 osascript -e 'tell application id "com.shots.app" to quit' >/dev/null 2>&1 || true

@@ -35,4 +35,9 @@ func copyImageToPasteboard(path: String) throws {
     let pasteboard = NSPasteboard.general
     pasteboard.clearContents()
     guard pasteboard.writeObjects([image]) else { throw ShotsError("clipboard: pasteboard write failed") }
+    // NSImage only offers TIFF; many apps (browsers, Slack) paste PNG better, as macOS's own
+    // copy-screenshot does.
+    if path.lowercased().hasSuffix(".png"), let png = FileManager.default.contents(atPath: path) {
+        pasteboard.setData(png, forType: .png)
+    }
 }

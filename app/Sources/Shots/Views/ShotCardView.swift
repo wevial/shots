@@ -1,12 +1,13 @@
 import ShotsKit
 import SwiftUI
 
-/// One grid card: thumbnail, title, relative date, category and review badges, and a spinner
-/// while a recat is running on it.
+/// One grid card: thumbnail, title, relative date, category and review badges, a spinner
+/// while a recat is running on it, and a copy button while hovered.
 struct ShotCardView: View {
     @Environment(AppModel.self) private var model
     let shot: Shot
     var isSelected = false
+    @State private var isHovered = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -19,6 +20,13 @@ struct ShotCardView: View {
                         ProgressView()
                             .padding(10)
                             .background(.regularMaterial, in: .rect(cornerRadius: 8))
+                    }
+                }
+                .overlay(alignment: .topTrailing) {
+                    if isHovered && shot.fileExists {
+                        CopyImageButton(shot: shot)
+                            .padding(6)
+                            .transition(.opacity)
                     }
                 }
 
@@ -53,6 +61,34 @@ struct ShotCardView: View {
                 .strokeBorder(isSelected ? Color.accentColor : .clear, lineWidth: 2)
         }
         .contentShape(.rect(cornerRadius: 10))
+        .onHover { hovering in
+            withAnimation(.easeOut(duration: 0.12)) { isHovered = hovering }
+        }
+    }
+}
+
+/// The two-squares copy button on a hovered card; shows a checkmark for a moment after copying.
+private struct CopyImageButton: View {
+    @Environment(AppModel.self) private var model
+    let shot: Shot
+    @State private var copied = false
+
+    var body: some View {
+        Button {
+            model.copyImage(shot)
+            copied = true
+            Task {
+                try? await Task.sleep(for: .seconds(1.2))
+                copied = false
+            }
+        } label: {
+            Image(systemName: copied ? "checkmark" : "doc.on.doc")
+                .contentTransition(.symbolEffect(.replace))
+                .frame(width: 26, height: 26)
+                .background(.regularMaterial, in: .rect(cornerRadius: 6))
+        }
+        .buttonStyle(.plain)
+        .help("Copy Image")
     }
 }
 
