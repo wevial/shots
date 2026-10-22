@@ -25,8 +25,7 @@ struct CapturePreviewView: View {
         }
         .padding(10)
         .frame(width: 330)
-        .background(Color(nsColor: .controlBackgroundColor), in: .rect(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.primary.opacity(0.1)))
+        .glassEffect(.regular, in: .rect(cornerRadius: 16))
         .overlay(alignment: .topLeading) {
             if preview.isHovered { closeButton }
         }

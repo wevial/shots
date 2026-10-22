@@ -17,6 +17,9 @@ struct ContentView: View {
         } detail: {
             detail
                 .navigationTitle(model.scope.title)
+                .background { Backdrop() }
+                // Let the backdrop show through the title bar instead of an opaque strip.
+                .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
         }
         .safeAreaInset(edge: .top, spacing: 0) {
             if !model.loginItem.wasOffered {

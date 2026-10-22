@@ -48,7 +48,8 @@ struct SidebarView: View {
             title: scope.title,
             systemImage: Self.symbol(for: scope),
             count: model.counts.count(for: scope),
-            highlightsCount: scope == .review || scope == .failed
+            highlightsCount: scope == .review || scope == .failed,
+            tint: Self.tint(for: scope)
         )
         .tag(scope)
         .clickable()
@@ -58,6 +59,15 @@ struct SidebarView: View {
     private static func symbol(for scope: SidebarScope) -> String {
         if case .category(let name) = scope { return categorySymbol(name) }
         return scope.systemImage
+    }
+
+    private static func tint(for scope: SidebarScope) -> Color? {
+        switch scope {
+        case .category(let name): Theme.color(for: name)
+        case .review: .orange
+        case .failed: .red
+        default: .accentColor
+        }
     }
 
     static func categorySymbol(_ category: String) -> String {
@@ -86,6 +96,7 @@ private struct SidebarRow: View {
     let systemImage: String
     let count: Int
     let highlightsCount: Bool
+    var tint: Color?
 
     var body: some View {
         Label {
@@ -107,6 +118,7 @@ private struct SidebarRow: View {
             }
         } icon: {
             Image(systemName: systemImage)
+                .foregroundStyle(tint ?? .secondary)
         }
     }
 }

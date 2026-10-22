@@ -47,23 +47,31 @@ struct ShotCardView: View {
                 }
             }
 
-            Text(shot.category)
-                .font(.caption2.weight(.medium))
-                .padding(.horizontal, 6)
-                .padding(.vertical, 2)
-                .background(.tint.opacity(0.15), in: .capsule)
-                .lineLimit(1)
+            CategoryBadge(category: shot.category)
         }
         .padding(8)
-        .background(isSelected ? AnyShapeStyle(.selection.opacity(0.35)) : AnyShapeStyle(.clear), in: .rect(cornerRadius: 10))
-        .overlay {
-            RoundedRectangle(cornerRadius: 10)
-                .strokeBorder(isSelected ? Color.accentColor : .clear, lineWidth: 2)
-        }
-        .contentShape(.rect(cornerRadius: 10))
+        .modifier(CardSurface(isSelected: isSelected, isHovered: isHovered))
+        .contentShape(.rect(cornerRadius: 14))
         .onHover { hovering in
             withAnimation(.easeOut(duration: 0.12)) { isHovered = hovering }
         }
+    }
+}
+
+/// The card's background: frosted glass over the backdrop, tinted and outlined when selected,
+/// lifting a touch on hover.
+private struct CardSurface: ViewModifier {
+    let isSelected: Bool
+    let isHovered: Bool
+
+    func body(content: Content) -> some View {
+        content
+            .glassEffect(.regular.tint(isSelected ? Color.accentColor.opacity(0.35) : nil), in: .rect(cornerRadius: 14))
+            .overlay {
+                RoundedRectangle(cornerRadius: 14)
+                    .strokeBorder(isSelected ? Color.accentColor : .clear, lineWidth: 2)
+            }
+            .scaleEffect(isHovered && !isSelected ? 1.015 : 1)
     }
 }
 

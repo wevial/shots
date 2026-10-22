@@ -59,6 +59,7 @@ struct InspectorView: View {
             } label: {
                 Text(shot.category)
             }
+            .buttonStyle(.glass)
             .fixedSize()
             .clickable()
 
@@ -71,6 +72,7 @@ struct InspectorView: View {
             } label: {
                 Label("Re-run", systemImage: "arrow.clockwise")
             }
+            .buttonStyle(.glass)
             .fixedSize()
             .clickable()
 
@@ -140,6 +142,7 @@ private struct ActionTiles: View {
     @State private var copied = false
 
     var body: some View {
+        GlassEffectContainer(spacing: 8) {
         HStack(spacing: 8) {
             tile(copied ? "Copied" : "Copy", copied ? "checkmark" : "doc.on.doc") {
                 model.copyImage(shot)
@@ -152,6 +155,7 @@ private struct ActionTiles: View {
             tile("Quick Look", "eye") { model.quickLook(shot) }
             tile("Reveal", "folder") { model.revealInFinder(shot) }
             tile("Open", "arrow.up.forward.app") { model.open(shot) }
+        }
         }
         .disabled(!shot.fileExists)
     }
@@ -176,14 +180,15 @@ private struct ActionTiles: View {
     }
 }
 
-/// A filled tile that darkens while pressed.
+/// A Liquid Glass tile that reacts to the pointer and to presses.
 private struct TileButtonStyle: ButtonStyle {
     @Environment(\.isEnabled) private var isEnabled
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .foregroundStyle(isEnabled ? .primary : .tertiary)
-            .background(.quaternary.opacity(configuration.isPressed ? 1 : 0.6), in: .rect(cornerRadius: 8))
+            .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 10))
+            .scaleEffect(configuration.isPressed ? 0.96 : 1)
     }
 }
 
