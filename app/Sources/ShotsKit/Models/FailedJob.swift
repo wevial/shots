@@ -1,4 +1,5 @@
 import Foundation
+import ShotsCore
 
 /// A screenshot every backend failed on. It is still in the inbox and the daemon retries it.
 /// A row of the `jobs` table with `status = 'failed'`.
@@ -61,6 +62,20 @@ extension FailedJob: Decodable {
             attempts: try c.decode(Int.self, forKey: .attempts),
             lastError: try c.decodeIfPresent(String.self, forKey: .lastError),
             updatedAt: try date(.updatedAt)
+        )
+    }
+}
+
+extension FailedJob {
+    public init(row: JobRow) {
+        self.init(
+            id: row.id,
+            inboxPath: row.inboxPath,
+            originalName: row.originalName,
+            detectedAt: ISODate.parse(row.detectedAt) ?? .distantPast,
+            attempts: row.attempts,
+            lastError: row.lastError,
+            updatedAt: ISODate.parse(row.updatedAt) ?? .distantPast
         )
     }
 }

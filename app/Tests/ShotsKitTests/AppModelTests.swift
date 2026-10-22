@@ -8,7 +8,7 @@ struct AppModelTests {
         let db = try TestDatabase()
         try db.insertShot(id: 1, category: "code", title: "One", capturedAt: "2026-10-20T10:00:00.000Z")
         try db.insertShot(id: 2, category: "legacy", title: "Two", capturedAt: "2026-10-21T10:00:00.000Z", review: true)
-        let model = AppModel(cli: nil, config: .sample, store: try ShotStore(path: db.path))
+        let model = AppModel(config: .sample, store: try ShotStore(path: db.path))
 
         await model.reload()
         #expect(model.shots.map(\.id) == [2, 1])

@@ -87,7 +87,7 @@ extension ShotsConfig {
 extension AppModel {
     /// A model filled with sample data that never touches the index or the CLI.
     public static func preview(scope: SidebarScope = .all, selecting shot: Shot? = nil) -> AppModel {
-        let model = AppModel(cli: nil, config: .sample)
+        let model = AppModel(config: .sample)
         model.shots = Shot.samples.filter { shot in
             switch scope {
             case .all: true

@@ -1,4 +1,5 @@
 import Foundation
+import ShotsCore
 
 /// One filed screenshot: a row of the `shots` table.
 public struct Shot: Identifiable, Hashable, Sendable {
@@ -163,8 +164,37 @@ extension Shot: Decodable {
 
 /// The daemon writes `Date.toISOString()` (always with milliseconds), but accept both forms.
 enum ISODate {
-    static func parse(_ text: String) -> Date? {
-        if let date = try? Date.ISO8601FormatStyle(includingFractionalSeconds: true).parse(text) { return date }
-        return try? Date.ISO8601FormatStyle().parse(text)
+    static func parse(_ text: String) -> Date? { Timestamp.parse(text) }
+}
+
+// MARK: - From the index's own rows
+
+extension Shot {
+    /// The viewer's model of a `shots` row. Unparseable dates become `.distantPast`.
+    public init(row: ShotRow) {
+        self.init(
+            id: row.id,
+            path: row.path,
+            originalName: row.originalName,
+            sha256: row.sha256,
+            capturedAt: ISODate.parse(row.capturedAt) ?? .distantPast,
+            processedAt: ISODate.parse(row.processedAt) ?? .distantPast,
+            appBundleID: row.appBundleId,
+            appName: row.appName,
+            windowTitle: row.windowTitle,
+            pageURL: row.url.flatMap(URL.init(string:)),
+            pageTitle: row.urlTitle,
+            captureType: row.captureType,
+            width: row.width,
+            height: row.height,
+            ocrText: row.ocrText,
+            category: row.category,
+            suggestedCategory: row.suggestedCategory,
+            tags: row.tags,
+            title: row.title,
+            confidence: row.confidence,
+            backend: row.backend,
+            needsReview: row.review
+        )
     }
 }

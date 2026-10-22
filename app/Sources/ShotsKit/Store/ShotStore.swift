@@ -1,4 +1,8 @@
 import Foundation
+import ShotsCore
+
+/// The store's errors are ShotsCore's SQLite errors.
+public typealias SQLiteError = ShotsCore.SQLiteError
 
 /// Read-only access to the daemon's SQLite index.
 ///
@@ -86,41 +90,10 @@ public actor ShotStore {
     // MARK: Row mapping
 
     private static func shot(_ row: SQLiteConnection.Row) throws -> Shot {
-        Shot(
-            id: row.int("id") ?? 0,
-            path: row.string("path") ?? "",
-            originalName: row.string("original_name") ?? "",
-            sha256: row.string("sha256") ?? "",
-            capturedAt: row.string("captured_at").flatMap(ISODate.parse) ?? .distantPast,
-            processedAt: row.string("processed_at").flatMap(ISODate.parse) ?? .distantPast,
-            appBundleID: row.string("app_bundle_id"),
-            appName: row.string("app_name"),
-            windowTitle: row.string("window_title"),
-            pageURL: row.string("url").flatMap(URL.init(string:)),
-            pageTitle: row.string("url_title"),
-            captureType: row.string("capture_type"),
-            width: row.int("width").map(Int.init),
-            height: row.int("height").map(Int.init),
-            ocrText: row.string("ocr_text") ?? "",
-            category: row.string("category") ?? "misc",
-            suggestedCategory: row.string("suggested_category"),
-            tags: Shot.decodeTags(row.string("tags_json")),
-            title: row.string("title") ?? "",
-            confidence: row.double("confidence") ?? 0,
-            backend: row.string("backend") ?? "",
-            needsReview: (row.int("review") ?? 0) != 0
-        )
+        Shot(row: ShotRow(row: row))
     }
 
     private static func failedJob(_ row: SQLiteConnection.Row) throws -> FailedJob {
-        FailedJob(
-            id: row.int("id") ?? 0,
-            inboxPath: row.string("inbox_path") ?? "",
-            originalName: row.string("original_name") ?? "",
-            detectedAt: row.string("detected_at").flatMap(ISODate.parse) ?? .distantPast,
-            attempts: Int(row.int("attempts") ?? 0),
-            lastError: row.string("last_error"),
-            updatedAt: row.string("updated_at").flatMap(ISODate.parse) ?? .distantPast
-        )
+        FailedJob(row: JobRow(row: row))
     }
 }

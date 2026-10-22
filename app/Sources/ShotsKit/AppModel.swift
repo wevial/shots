@@ -1,6 +1,7 @@
 import AppKit
 import Foundation
 import Observation
+import ShotsCore
 
 /// Everything the windows and the menu bar show, and every action they can take.
 ///
@@ -12,7 +13,7 @@ public final class AppModel {
     // MARK: Setup
 
     public private(set) var config: ShotsConfig
-    /// Why the app can't show anything (no index, no `shots` command). Nil when all is well.
+    /// Why the app can't show anything (bad config, no index). Nil when all is well.
     public private(set) var setupError: String?
 
     // MARK: What the user picked
@@ -50,14 +51,24 @@ public final class AppModel {
 
     // MARK: Dependencies
 
-    @ObservationIgnored private var cli: ShotsCLI?
+    /// The watcher and pipeline, running in this process.
+    public let daemon: DaemonController
+    public let loginItem: LaunchAtLogin
+    public let system: SystemStatus
     @ObservationIgnored private var store: ShotStore?
     @ObservationIgnored private var lastDataVersion: Int64?
     @ObservationIgnored private var reloadTask: Task<Void, Never>?
     @ObservationIgnored private var pollTask: Task<Void, Never>?
 
-    public init(cli: ShotsCLI? = ShotsCLI.locate(), config: ShotsConfig = .defaults, store: ShotStore? = nil) {
-        self.cli = cli
+    public init(
+        daemon: DaemonController = DaemonController(),
+        loginItem: LaunchAtLogin = LaunchAtLogin(),
+        config: ShotsConfig = .defaults,
+        store: ShotStore? = nil
+    ) {
+        self.daemon = daemon
+        self.loginItem = loginItem
+        system = SystemStatus(native: daemon.native)
         self.config = config
         self.store = store
     }
@@ -76,6 +87,22 @@ public final class AppModel {
         return config.categories + extra
     }
 
+    /// The menu bar's first line.
+    public var statusLine: String {
+        switch daemon.state {
+        case .idle, .starting: "Starting…"
+        case .paused: "Paused"
+        case .failed: "Not running"
+        case .watching: daemon.filing > 0 ? "Filing \(daemon.filing)…" : "Watching"
+        }
+    }
+
+    /// The newest filed shot, shown under the status line while watching.
+    public var lastFiledLine: String? {
+        guard daemon.state == .watching, daemon.filing == 0, let shot = recentShots.first else { return nil }
+        return "Last: \(shot.displayTitle)"
+    }
+
     public func isRecategorizing(_ shot: Shot) -> Bool {
         recategorizing.contains(shot.id)
     }
@@ -92,7 +119,7 @@ public final class AppModel {
     public func start() {
         guard pollTask == nil else { return }
         pollTask = Task { [weak self] in
-            await self?.connect()
+            await self?.connect(reloadEngine: true)
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(2))
                 await self?.poll()
@@ -105,10 +132,20 @@ public final class AppModel {
         pollTask = nil
     }
 
-    /// Re-reads the config and everything shown. For a "Refresh" command.
+    /// Re-reads everything shown. For a "Refresh" command.
     public func refresh() async {
         store = nil
-        await connect()
+        await connect(reloadEngine: false)
+    }
+
+    /// Re-reads the config file and restarts the watcher with it.
+    public func reloadConfig() async {
+        store = nil
+        await connect(reloadEngine: true)
+    }
+
+    public func togglePaused() async {
+        await daemon.togglePaused()
     }
 
     /// Reads the current scope and search, plus counts, failed jobs and recent shots.
@@ -146,13 +183,13 @@ public final class AppModel {
         }
     }
 
-    private func connect() async {
-        if cli == nil { cli = ShotsCLI.locate() }
+    private func connect(reloadEngine: Bool) async {
+        if reloadEngine { await daemon.load() }
         var problems: [String] = []
-        if let cli {
-            do { config = try await cli.config() } catch { problems.append(error.localizedDescription) }
-        } else {
-            problems.append("The shots command isn't installed. Run scripts/install.sh, or set SHOTS_BIN.")
+        if let loaded = daemon.config {
+            config = ShotsConfig(loaded, configPath: Config.path())
+        } else if case .failed(let message) = daemon.state {
+            problems.append(message)
         }
 
         if store == nil {
@@ -164,14 +201,13 @@ public final class AppModel {
         } else {
             isLoading = false
         }
-        // Without the CLI the app can still browse, so only a missing index blocks the window.
         setupError = store == nil ? problems.joined(separator: "\n") : nil
     }
 
     /// Reloads when the daemon (or a `recat`) has committed since the last look.
     private func poll() async {
         guard let store else {
-            await connect() // The index may exist now, e.g. right after install.
+            await connect(reloadEngine: false) // The index may exist now, e.g. right after install.
             return
         }
         guard let version = try? await store.dataVersion(), version != lastDataVersion else { return }
@@ -192,22 +228,22 @@ public final class AppModel {
         selectedShotID = shot.id
     }
 
-    // MARK: Changing shots (always through the CLI)
+    // MARK: Changing shots (in process, through the daemon's database)
 
     /// Files the shot under `category` by hand. Also how a review is resolved.
     public func recategorize(_ shot: Shot, to category: String) async {
         guard category != shot.category || shot.needsReview else { return }
-        await runRecat(on: shot) { cli in try await cli.recategorize(path: shot.path, to: category) }
+        await runRecat(on: shot) { daemon in try await daemon.recat(shotID: shot.id, category: category) }
     }
 
     /// Classifies the shot again with one backend.
     public func rerun(_ shot: Shot, backend: ClassifierBackend) async {
-        await runRecat(on: shot) { cli in try await cli.rerun(path: shot.path, backend: backend) }
+        await runRecat(on: shot) { daemon in try await daemon.recat(shotID: shot.id, backend: backend) }
     }
 
-    private func runRecat(on shot: Shot, _ command: (ShotsCLI) async throws -> RecatResult) async {
-        guard let cli else {
-            lastError = "The shots command isn't installed, so screenshots can't be changed."
+    private func runRecat(on shot: Shot, _ command: (DaemonController) async throws -> RecatResult) async {
+        guard daemon.state != .idle else {
+            lastError = "The screenshot engine isn't running, so screenshots can't be changed."
             return
         }
         guard !recategorizing.contains(shot.id) else { return }
@@ -215,7 +251,7 @@ public final class AppModel {
         defer { recategorizing.remove(shot.id) }
 
         do {
-            let result = try await command(cli)
+            let result = try await command(daemon)
             // Show the new title/category/path right away; the reload below catches the rest.
             replace(result.shot)
             await reload()

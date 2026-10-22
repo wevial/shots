@@ -1,3 +1,5 @@
+import ShotsCore
+
 /// The classifiers a shot can be filed by.
 public enum ClassifierBackend: String, CaseIterable, Identifiable, Sendable {
     case apple
@@ -24,4 +26,9 @@ public enum ClassifierBackend: String, CaseIterable, Identifiable, Sendable {
 
     /// Cloud backends take 5–30 seconds, so the UI can say so.
     public var isCloud: Bool { self == .claudeCode || self == .codex }
+}
+
+extension ClassifierBackend {
+    /// The chain's name for this backend; nil for `manual`, which isn't a classifier.
+    public var backendName: BackendName? { BackendName(rawValue: rawValue) }
 }

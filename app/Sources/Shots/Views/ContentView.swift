@@ -18,6 +18,11 @@ struct ContentView: View {
             detail
                 .navigationTitle(model.scope.title)
         }
+        .safeAreaInset(edge: .top, spacing: 0) {
+            if !model.loginItem.wasOffered {
+                LaunchAtLoginBanner()
+            }
+        }
         .searchable(text: $model.searchText, prompt: "Search screenshots")
         .inspector(isPresented: $showsInspector) {
             inspector

@@ -1,4 +1,5 @@
 import Foundation
+import ShotsCore
 
 /// The parts of `shots config --json` the viewer needs.
 public struct ShotsConfig: Sendable, Equatable {
@@ -29,13 +30,20 @@ public struct ShotsConfig: Sendable, Equatable {
     /// What the daemon uses when no config file overrides it.
     public static var defaults: ShotsConfig {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
-        return ShotsConfig(
-            configPath: "\(home)/.config/shots/config.json",
-            dbPath: "\(home)/.local/share/shots/shots.db",
-            categories: ["code", "design", "ui-reference", "docs", "chat", "finance", "receipts",
-                         "shopping", "travel", "social", "errors", "misc"],
-            outputRoot: "\(home)/Screenshots",
-            inbox: "\(home)/Screenshots/_inbox"
+        var config = ShotsConfig(Config.defaults(home: home), configPath: "\(home)/.config/shots/config.json")
+        config.categoryHints = [:]
+        return config
+    }
+
+    /// The viewer's slice of a loaded config, for running without the CLI.
+    public init(_ config: Config, configPath: String = Config.path()) {
+        self.init(
+            configPath: configPath,
+            dbPath: config.databasePath,
+            categories: config.categories,
+            categoryHints: config.categoryHints,
+            outputRoot: config.outputRoot,
+            inbox: config.inbox
         )
     }
 
