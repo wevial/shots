@@ -32,8 +32,6 @@ struct SidebarView: View {
             }
         }
         .navigationSplitViewColumnWidth(min: 180, ideal: 210, max: 280)
-        .scrollContentBackground(.hidden)
-        .background { Backdrop() }
     }
 
     /// Categories that hold screenshots, plus the selected one so the selection never vanishes.

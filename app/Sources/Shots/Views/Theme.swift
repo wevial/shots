@@ -37,8 +37,8 @@ struct Backdrop: View {
         )
         .opacity(colorScheme == .dark ? 0.3 : 0.14)
         .background(Color(nsColor: .windowBackgroundColor))
-        // Up under the title bar so it shares the surface; not under the sidebar.
-        .ignoresSafeArea(edges: .top)
+        // Under the title bar and the sidebar, so both are glass over the same gradient.
+        .ignoresSafeArea()
     }
 }
 

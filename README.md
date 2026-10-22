@@ -78,7 +78,7 @@ The app records what it actually has in `~/.local/share/shots/daemon-status.json
 ## The app
 
 - **Capture preview:** each new screenshot pops a small panel in the bottom-right corner: "Copied · Filing…" within about half a second, then the title, a category menu to re-file it, and Open. It hides a few seconds after filing (not while hovered), can be dragged into other apps, and never takes focus. Toggle it with Show Preview After Capture in the menu bar menu or the Status window. It replaces the macOS floating thumbnail, which stays off.
-- **Look:** Liquid Glass cards and controls over a soft gradient in the icon's colors behind the sidebar and grid; each category has its own color on its sidebar icon and badge.
+- **Look:** Liquid Glass cards and controls over a soft gradient in the icon's colors behind the grid, which also shows through the glass sidebar and title bar; each category has its own color on its sidebar icon and badge.
 - **Sidebar:** All, Needs Review, Failed, then the categories that hold screenshots; empty ones fold under More.
 - **Grid:** thumbnails, newest first, with full-text search over OCR text, titles, tags, app, window and URL. Hovering a card shows a Copy strip along the bottom of its image.
 - **Inspector:** preview, title, then Copy / Quick Look / Reveal / Open tiles, a category menu and a Re-run menu (Apple/Claude/Codex), a one-click accept for a suggested category, tags, metadata, OCR text.
