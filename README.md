@@ -201,4 +201,4 @@ scripts/build-app.sh --install
 
 ## License
 
-Not yet chosen.
+[MIT](LICENSE)
