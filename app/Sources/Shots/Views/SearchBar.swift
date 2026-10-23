@@ -14,6 +14,7 @@ struct SearchBar: View {
                 .foregroundStyle(.secondary)
             TextField("Search screenshots", text: $text)
                 .textFieldStyle(.plain)
+                .accessibilityIdentifier("search") // stable handle for UI automation (scripts/ui-smoke)
                 .focused(focus, equals: .search)
                 .onKeyPress(.downArrow) {
                     onMoveToResults()

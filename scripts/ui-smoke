@@ -14,6 +14,7 @@ Exit status is the number of failed checks.
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -22,8 +23,11 @@ import time
 
 # Ended sessions can't be reused, so each run gets its own label.
 SESSION = f"shots-smoke-{os.getpid()}-{int(time.time())}"
-SEARCH_LABEL = "Search screenshots"
-PALETTE_LABEL = "Type a command or screenshot…"
+# Fields are found by accessibility identifier (their label is the placeholder only while empty);
+# the placeholder is what an empty field reads back as.
+SEARCH = "search"
+PALETTE = "palette"
+PLACEHOLDERS = {SEARCH: "Search screenshots", PALETTE: "Type a command or screenshot…"}
 
 
 def call(tool, **args):
@@ -39,7 +43,7 @@ class Shots:
     """The Shots main window: lookup by label, window-relative clicks, foreground keys."""
 
     def __init__(self):
-        self.pid, self.window_id, self.origin = self._find_window()
+        self.pid, self.window_id = self._find_window()
 
     def _find_window(self):
         for attempt in range(20):
@@ -47,7 +51,7 @@ class Shots:
             main = [w for w in windows if w.get("layer") == 0 and w["bounds"]["width"] > 500]
             if main:
                 w = max(main, key=lambda w: w.get("z_index") or 0)
-                return w["pid"], w["window_id"], (w["bounds"]["x"], w["bounds"]["y"])
+                return w["pid"], w["window_id"]
             if attempt == 0:
                 subprocess.run(["open", "-a", "/Applications/Shots.app"])
             time.sleep(0.5)
@@ -56,30 +60,51 @@ class Shots:
     def target(self, **extra):
         return {"pid": self.pid, "window_id": self.window_id, **extra}
 
-    def elements(self):
-        state = call("get_window_state", **self.target(include_screenshot=False, tree_format="elements", max_elements=200))
-        return state.get("elements", [])
+    def read(self):
+        return call("get_window_state", **self.target(
+            include_screenshot=False, tree_format="both", max_elements=300, timeout_ms=5000))
 
-    def field(self, label):
-        """The text field with this label (its placeholder), or None if it isn't on screen."""
-        for e in self.elements():
-            if e.get("role") == "AXTextField" and e.get("label") == label:
-                return e
+    def elements(self):
+        return self.read().get("elements", [])
+
+    def origin(self, elements):
+        """The window's top-left in the same coordinates as element frames (list_windows'
+        bounds use a different space on multi-display setups)."""
+        win = next(e for e in elements if e.get("role") == "AXWindow" and e.get("frame"))
+        return win["frame"]["x"], win["frame"]["y"]
+
+    def field(self, identifier):
+        """The text field with this accessibility identifier, or None if it isn't on screen.
+        Identifiers only appear in the markdown tree, so match its `[N] … id=…` row to element N.
+        A read taken mid-animation can miss elements without saying so, so look three times."""
+        row = re.compile(r"\[(\d+)\] AXTextField.*\bid=" + re.escape(identifier) + r"\b")
+        for _ in range(3):
+            state = self.read()
+            for line in state.get("tree_markdown", "").splitlines():
+                if m := row.search(line):
+                    index = int(m.group(1))
+                    return next((e for e in state.get("elements", []) if e.get("element_index") == index), None)
+            time.sleep(0.4)
         return None
 
-    def value(self, label):
-        """The field's text; an empty field reports its placeholder, which reads back as ''."""
-        f = self.field(label)
+    def value(self, identifier):
+        """The field's text, or None if the field isn't on screen."""
+        f = self.field(identifier)
         if f is None:
             return None
         v = f.get("value") or ""
-        return "" if v == label else v
+        return "" if v == PLACEHOLDERS[identifier] else v
 
     def click_element(self, element, dx=None):
         frame = element["frame"]
-        x = frame["x"] - self.origin[0] + (dx if dx is not None else frame["w"] / 2)
-        y = frame["y"] - self.origin[1] + frame["h"] / 2
-        call("click", **self.target(x=x, y=y, delivery_mode="foreground"))
+        ox, oy = self.origin(self.elements())
+        x = frame["x"] - ox + (dx if dx is not None else frame["w"] / 2)
+        y = frame["y"] - oy + frame["h"] / 2
+        # Pixel clicks are refused (screenshot_context_missing) without a fresh capture to aim at.
+        self.screenshot(os.path.join(tempfile.gettempdir(), "shots-ui-smoke-aim.png"))
+        result = call("click", **self.target(x=x, y=y, delivery_mode="foreground"))
+        if result.get("code"):
+            print(f"      click refused: {result.get('code')} {result.get('reason', '')}")
         time.sleep(0.4)
 
     def type(self, text):
@@ -98,8 +123,8 @@ class Shots:
         call("get_window_state", **self.target(include_accessibility_tree=False, include_screenshot=False, screenshot_out_file=path))
 
     def clear_search(self):
-        f = self.field(SEARCH_LABEL)
-        if f and self.value(SEARCH_LABEL):
+        f = self.field(SEARCH)
+        if f and self.value(SEARCH):
             # The clear (x) button sits at the field's trailing end.
             self.click_element(f, dx=f["frame"]["w"] + 4)
 
@@ -119,36 +144,38 @@ def main():
     print(f"Shots pid {app.pid}, window {app.window_id}")
 
     # Start from a known state: palette closed, remember what was in the search bar.
-    if app.field(PALETTE_LABEL):
+    if app.field(PALETTE):
         app.press("escape")
-    original_search = app.value(SEARCH_LABEL) or ""
+    original_search = app.value(SEARCH) or ""
     app.clear_search()
 
     try:
         # 1. Typing into the search bar reaches the search bar.
-        app.click_element(app.field(SEARCH_LABEL))
+        app.click_element(app.field(SEARCH))
         app.type("zzqx")
-        check("search bar takes typing", app.value(SEARCH_LABEL) == "zzqx", f"search={app.value(SEARCH_LABEL)!r}")
+        check("search bar takes typing", app.value(SEARCH) == "zzqx", f"search={app.value(SEARCH)!r}")
         app.screenshot(os.path.join(shots_dir, "1-no-results.png"))
 
         # 2. ⌘K while the search bar has focus opens the palette, and typing goes there.
         app.keys("cmd", "k")
-        check("⌘K opens the palette from the search bar", app.field(PALETTE_LABEL) is not None)
+        check("⌘K opens the palette from the search bar", app.field(PALETTE) is not None)
         app.type("ne")
-        check("palette takes typing after ⌘K", app.value(PALETTE_LABEL) == "ne", f"palette={app.value(PALETTE_LABEL)!r}")
-        check("search bar untouched while the palette is open", app.value(SEARCH_LABEL) == "zzqx", f"search={app.value(SEARCH_LABEL)!r}")
+        check("palette takes typing after ⌘K", app.value(PALETTE) == "ne", f"palette={app.value(PALETTE)!r}")
         app.screenshot(os.path.join(shots_dir, "2-palette.png"))
 
-        # 3. Esc closes it.
+        # 3. Esc closes it, and what was typed in the palette never reached the search bar.
+        # (Checked after closing: while the palette is up the search field is disabled, and
+        # disabled fields drop their identifier from the accessibility tree.)
         app.press("escape")
-        check("Esc closes the palette", app.field(PALETTE_LABEL) is None)
+        check("Esc closes the palette", app.field(PALETTE) is None)
+        check("palette typing didn't reach the search bar", app.value(SEARCH) == "zzqx", f"search={app.value(SEARCH)!r}")
 
         # 4. ⌘F puts the keyboard back in the search bar.
         app.clear_search()
         app.press("escape")
         app.keys("cmd", "f")
         app.type("q")
-        check("⌘F focuses the search bar", app.value(SEARCH_LABEL) == "q", f"search={app.value(SEARCH_LABEL)!r}")
+        check("⌘F focuses the search bar", app.value(SEARCH) == "q", f"search={app.value(SEARCH)!r}")
         app.clear_search()
 
         # 5. ⌘K from the grid (after selecting a card) also takes typing.
@@ -158,16 +185,16 @@ def main():
             app.click_element(cards[0])
         app.keys("cmd", "k")
         app.type("ne")
-        check("palette takes typing after ⌘K from the grid", app.value(PALETTE_LABEL) == "ne", f"palette={app.value(PALETTE_LABEL)!r}")
+        check("palette takes typing after ⌘K from the grid", app.value(PALETTE) == "ne", f"palette={app.value(PALETTE)!r}")
         app.press("escape")
         app.screenshot(os.path.join(shots_dir, "3-grid.png"))
     finally:
         # Leave things as found: palette closed, original search text back.
-        if app.field(PALETTE_LABEL):
+        if app.field(PALETTE):
             app.press("escape")
         app.clear_search()
         if original_search:
-            app.click_element(app.field(SEARCH_LABEL))
+            app.click_element(app.field(SEARCH))
             app.type(original_search)
         call("end_session")
 

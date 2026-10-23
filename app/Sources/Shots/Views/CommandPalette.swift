@@ -69,6 +69,7 @@ struct CommandPalette: View {
                 .foregroundStyle(.secondary)
             TextField("Type a command or screenshot…", text: $query)
                 .textFieldStyle(.plain)
+                .accessibilityIdentifier("palette") // stable handle for UI automation (scripts/ui-smoke)
                 .focused($isFieldFocused)
                 .onSubmit { run(highlighted(in: sections.flatMap(\.commands))) }
                 .onKeyPress(.upArrow) { moveHighlight(by: -1) }
