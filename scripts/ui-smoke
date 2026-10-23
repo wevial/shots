@@ -123,10 +123,13 @@ class Shots:
         call("get_window_state", **self.target(include_accessibility_tree=False, include_screenshot=False, screenshot_out_file=path))
 
     def clear_search(self):
+        """Empty the search bar with the keyboard (⌘A, Delete): aiming at the small clear
+        button by pixel missed and left text behind."""
         f = self.field(SEARCH)
         if f and self.value(SEARCH):
-            # The clear (x) button sits at the field's trailing end.
-            self.click_element(f, dx=f["frame"]["w"] + 4)
+            self.click_element(f)
+            self.keys("cmd", "a")
+            self.press("delete")
 
 
 results = []
