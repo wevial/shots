@@ -1,49 +1,35 @@
-# shots
+# Shots
 
-A macOS menu bar app that files screenshots on its own. Each new capture in the inbox is OCR'd on-device, tagged with the app/window/tab it came from, classified, renamed `YYYY-MM-DD_HHMM_<title>.png`, moved to `~/Screenshots/<category>/`, given Finder tags, and indexed for full-text search. A SwiftUI window lets you browse, search and re-file them.
+**Your screenshots, filed for you.** Shots is a macOS menu bar app that watches where your screenshots land, reads them on-device, works out what each one is, and files it: renamed, moved into a category folder, tagged in Finder, and searchable by the text inside it.
 
-```
-inbox event ─▶ capture app context ─▶ wait for stable size ─▶ xattr/mdls: is it a screenshot?
-           ─▶ Vision OCR ─▶ classify: apple → claude-code → codex (privacy-gated)
-           ─▶ rename + move + Finder tags + clipboard ─▶ SQLite FTS5 index
-```
+![The Shots window: a sidebar of categories, a grid of filed screenshots, and the details of the selected one](docs/images/main-window.png)
 
-Everything is one Swift package in `app/`:
-
-| Target | What it is |
-|---|---|
-| `ShotsCore` | Config, the SQLite index, file handling, the classifier chain and backends, the pipeline and the watcher. Foundation, SQLite3 and CryptoKit only |
-| `ShotsNative` | The macOS side: Vision OCR, NSWorkspace/Accessibility context, AppleScript tab URLs, screenshot xattrs, Finder tags, pasteboard, Foundation Models |
-| `ShotsKit` | What the app's views use: the read-only `ShotStore`, the view models (`Shot`, `FailedJob`), `AppModel`, and `DaemonController`, which runs the watcher inside the app |
-| `Shots` | The SwiftUI app: main window, Status & Permissions window, menu bar extra |
-| `ShotsCommand` | The `shots` CLI, shipped inside the bundle at `Contents/Helpers/shots` |
-
-Shots.app is the only process: it watches the inbox, files screenshots, and holds the macOS permissions. The CLI is for search and fixes from a terminal. Until October 2026 the daemon was a Bun/TypeScript LaunchAgent with a Swift helper. The port kept its config file, index schema and CLI output, and git history has the original.
+- **Automatic filing.** A screenshot of a stack trace lands in `errors/`, a receipt in `receipts/`, a boarding pass in `travel/`, each named like `2026-10-22_0914_skyline-air-boarding-pass-sfo-to-jfk.png`.
+- **Search by what's in them.** Text is read with Apple's Vision framework, so you can find a screenshot by any word it contains, or by the app, window or web page it came from.
+- **On-device first.** Classification starts with Apple's on-device model. Claude Code and Codex can step in for a second opinion, but never for screenshots of apps or sites you exclude.
+- **Instant copy.** Each new screenshot is on your clipboard within about half a second, with a small preview in the corner that shows where it was filed.
 
 ## Requirements
 
-macOS 26 or later with Apple Intelligence on, and Xcode with the macOS 27 SDK to build. The Claude Code and Codex CLIs are optional (cloud backends) and use whatever login they already have.
-
-## Design notes
-
-| macOS / tool behavior | What Shots does about it |
-|---|---|
-| `mdls` reports nothing for a fresh screenshot until Spotlight indexes it, and never in folders Spotlight skips | Reads the same fields from the file's `com.apple.metadata:kMDItemIsScreenCapture` / `…ScreenCaptureType` xattrs, which are there the moment it lands; `mdls` is the fallback |
-| Screenshot names contain a narrow no-break space (`… at 10.22.28 AM.png`) | Stores the original name verbatim and slugs the new one |
-| macOS writes a hidden `.Screenshot…` file, then renames it | Treats any change in the inbox as "rescan the folder" instead of trusting event names, plus a periodic rescan |
-| Foundation Models has a 4096-token context and is text-only on macOS 26 | Clips OCR to 4000 characters for apple; image input turns on by itself on macOS 27 when the model reports vision |
-| `claude -p --json-schema` returns `structured_output`; `--restricted --safe-mode` confine file reads to the working directory | Runs it in a temp folder holding only the image, with `Read` allowed on that one file |
-| `codex exec` takes the image with `-i`, a strict `--output-schema`, and a `read-only` sandbox | Runs it the same way; not every model name works on every account type, so set `codex.model` to one yours accepts (default `gpt-6-luna`) |
+- macOS 26 or later, with Apple Intelligence turned on (for on-device classification)
+- Xcode with the macOS 27 SDK, to build
+- Optional: the [Claude Code](https://claude.com/claude-code) and/or [Codex](https://developers.openai.com/codex) CLIs, signed in, for cloud classification
 
 ## Install
 
+Shots is built from source.
+
 ```bash
-scripts/install.sh
+git clone <this repo> shots
 ```
 
-This builds `Shots.app`, installs it to `/Applications`, symlinks `~/.local/bin/shots` to the CLI inside it, and launches it. It also removes the old `com.shots.agent` LaunchAgent if that's still around. On first launch the window offers **Launch at Login** (it uses `SMAppService`, so you can turn it off later in the Status window or in System Settings → General → Login Items). Started at login, the app stays in the menu bar. Opened by hand, it shows the window. Logs go to `~/Library/Logs/shots/shots.log`.
+```bash
+cd shots && scripts/install.sh
+```
 
-Next, point screenshots at the inbox and turn off the floating thumbnail:
+This builds `Shots.app`, installs it to `/Applications`, links the `shots` command-line tool to `~/.local/bin/shots`, and opens the app. On first launch it offers to start at login.
+
+Then send new screenshots to Shots' inbox, and turn off the macOS floating thumbnail (Shots shows its own preview; the system thumbnail delays the file by about 5 seconds):
 
 ```bash
 defaults write com.apple.screencapture location ~/Screenshots/_inbox
@@ -53,111 +39,143 @@ defaults write com.apple.screencapture location ~/Screenshots/_inbox
 defaults write com.apple.screencapture show-thumbnail -bool false
 ```
 
-The thumbnail delays the file write by about 5 seconds. Context is captured when the file appears, so with the thumbnail on, the "frontmost app" may already be a different app.
-
-Run `scripts/uninstall.sh` to quit and remove the app and the symlink. It keeps your screenshots, config and index.
-
-### Signing
-
-`scripts/build-app.sh` signs with the first **Apple Development** identity in your keychain, and falls back to ad-hoc signing with a warning. This matters for permissions: macOS ties an ad-hoc-signed app's grants to that exact build, so **every rebuild drops Accessibility**. Signed with a development certificate, grants survive rebuilds. To get one for free, sign into Xcode → Settings → Accounts with your Apple ID, then Manage Certificates → `+` → Apple Development. Check it with:
+Finally, grant **Accessibility** to Shots (see [Permissions](#permissions)) so it can record the window each screenshot came from. Check everything with:
 
 ```bash
-security find-identity -v -p codesigning
+shots doctor
 ```
+
+To uninstall, run `scripts/uninstall.sh`. It removes the app and the `shots` link, and leaves your screenshots, config and index alone.
+
+## Using Shots
+
+Take screenshots as usual. Each one is copied to your clipboard right away, then classified and moved to `~/Screenshots/<category>/`. A preview in the bottom-right corner shows the result, with a menu to change the category; turn it off with **Show Preview After Capture** in the menu bar menu.
+
+Open the window from the menu bar icon to browse:
+
+- **Sidebar:** All, Needs Review (screenshots Shots wasn't sure about), Failed, and your categories. Empty categories fold under More.
+- **Grid:** newest first, with full-text search. Hover a card to copy it.
+- **Inspector:** a larger preview, Copy / Quick Look / Reveal / Open, the category and Re-run menus, tags, where it came from, and the recognized text.
+
+![The ⌘K command palette over the Shots window](docs/images/command-palette.png)
+
+| Key | Action |
+|---|---|
+| ⌘K | Command palette: act on the selection, jump anywhere, or find any screenshot |
+| ⌘F | Search (↓ or Return to the results, Esc to clear) |
+| Arrow keys | Move through the grid |
+| Space / Return | Quick Look / open |
+| ⌘C | Copy the image |
+| ⌘1–⌘9 | Jump to a sidebar item |
+| ⌥⌘I | Show or hide the inspector |
+
+Shots keeps running in the menu bar when you close the window, and leaves the Dock. Quit it from the menu bar menu.
 
 ## Permissions
 
-All grants go to **Shots.app**. The **Status & Permissions** window (Shots ▸ Status & Permissions…, ⌘,, or the menu bar item) shows the live state of each and opens the right System Settings pane. If the menu bar item is missing, check System Settings → Menu Bar → Allow in the Menu Bar.
+All permissions belong to Shots.app. **Status & Permissions** (⌘, or the menu bar menu) shows what's granted and opens the right System Settings pane.
 
-| Permission | Needed for | Without it |
+| Permission | Used for | Without it |
 |---|---|---|
-| **Accessibility** | Focused window title; URL of browsers without AppleScript (Firefox) | App name and bundle ID still work (NSWorkspace needs no permission), and window titles fall back to Screen Recording |
-| **Automation** (per browser, prompted on first use) | Active tab URL and title in Safari and Chromium-family browsers (Chrome, Arc, Brave, Edge, Vivaldi, Dia) | No URL, or the AX fallback if Accessibility is granted |
-| Screen Recording | *Optional.* Window titles via CGWindowList when Accessibility is denied | No window title |
-| Full Disk Access | **Not needed** while the inbox and output are outside protected folders (Desktop, Documents and Downloads are protected) | — |
+| **Accessibility** | The title of the window you were in | Shots still knows the app, just not the window |
+| **Automation** (asked per browser, on first use) | The URL and title of the browser tab (Safari and Chromium-based browsers) | No URL |
+| Screen Recording (optional) | Window titles when Accessibility is off | No window title |
 
-The app records what it actually has in `~/.local/share/shots/daemon-status.json`, which `shots doctor` reads. Run from a terminal, `doctor` can only check the terminal's own grants directly.
+Full Disk Access isn't needed as long as your inbox and screenshot folders are outside Desktop, Documents and Downloads. If the menu bar icon is missing, check System Settings → Menu Bar.
 
-## The app
+## How classification works
 
-- **Capture preview:** each new screenshot pops a small panel in the bottom-right corner: "Copied · Filing…" within about half a second, then the title, a category menu to re-file it, and Open. It hides a few seconds after filing (not while hovered), can be dragged into other apps, and never takes focus. Toggle it with Show Preview After Capture in the menu bar menu or the Status window. It replaces the macOS floating thumbnail, which stays off.
-- **Look:** Liquid Glass cards and controls over a soft gradient in the icon's colors behind the grid, which also shows through the glass sidebar and title bar; each category has its own color on its sidebar icon and badge.
-- **Sidebar:** All, Needs Review, Failed, then the categories that hold screenshots; empty ones fold under More.
-- **Grid:** thumbnails, newest first, with full-text search over OCR text, titles, tags, app, window and URL. Hovering a card shows a Copy strip along the bottom of its image.
-- **Inspector:** preview, title, then Copy / Quick Look / Reveal / Open tiles, a category menu and a Re-run menu (Apple/Claude/Codex), a one-click accept for a suggested category, tags, metadata, OCR text.
-- **Keyboard:** ⌘K command palette (actions on the selection, go to any scope, app commands, and full-text jump to any screenshot); ⌘F search, ↓ or Return to the results, Esc to clear; arrow keys move through the grid; Space Quick Look; Return opens; ⌘C copies the image; Esc deselects; ⌘1–⌘9 jump to sidebar rows; ⌥⌘I toggles the inspector; Tab moves between panes. Drag a card out to another app, or right-click to move, re-run, reveal or copy.
-- **Menu bar:** watching status, Pause/Resume, the review count, recent screenshots, Open Inbox Folder, Show Preview After Capture, Status & Permissions.
+Shots asks a chain of classifiers, in order, for a category, a short title, tags and a confidence score. Each gets the recognized text, the app, window and URL the screenshot came from, and your list of categories.
 
-The app icon is drawn by `app/Resources/make-icon.swift`; re-run it (`swift app/Resources/make-icon.swift app/Resources`) after changing the drawing.
+| Classifier | Runs | Notes |
+|---|---|---|
+| **apple** | On-device (Foundation Models) | Text only on macOS 26; also sees the image on macOS 27 |
+| **claude-code** | Claude Code CLI | Runs in an empty temporary folder, can read only the one image, uses your existing login |
+| **codex** | Codex CLI | Read-only sandbox, image attached, uses your existing login |
+| **rules** | On-device | Maps apps to categories and spots keywords; a last resort |
 
-The views read the index through a read-only connection and refresh when `PRAGMA data_version` changes. Re-categorizing runs the same `recat` as the CLI, in-process. Nothing in the app deletes files.
+If a classifier fails, times out, or is less confident than `escalateBelowConfidence`, the next one gets a turn. If the best answer is still unsure, or names a category you don't have, the screenshot goes to `misc` and shows up under **Needs Review** with the suggestion, ready to accept with one click. If every classifier fails, the screenshot stays in the inbox and is retried later.
 
-## CLI
-
-```
-shots search <query> [--limit N] [--json]   FTS5 over OCR text, title, tags, app, window, URL
-shots recat <file> [--backend apple|claude-code|codex|rules] [--category <name>] [--json]
-shots review [--failed]                     low-confidence/unknown-category shots, or failed jobs
-shots doctor                                OS, model + image path, CLIs + auth, permissions, config
-shots config [--json]                       effective config
-shots run                                   watch the inbox headless (Shots.app normally does this)
-```
-
-`recat` reuses the stored OCR and context, renames and moves the file, and swaps only the tags shots applied (your own Finder tags stay). Passing `--backend` for a cloud backend on a denylisted shot is refused. Don't run `shots run` while the app is watching the same inbox.
-
-## Classifier chain
-
-Every backend gets the same prompt: the category list with one-line hints, the app/window/URL, the capture type and size, and the OCR text. Every backend returns `{category, tags, title, confidence}`.
-
-- **apple** runs Foundation Models in-process, using `@Generable` guided generation, on-device. Text-only on macOS 26. On 27+ with the vision capability, it attaches the image automatically.
-- **claude-code** runs `claude -p` in a fresh temp dir that holds only a copy of the image. It uses `--restricted --safe-mode --strict-mcp-config`, `Read` scoped to that one file, `dontAsk` permissions, no session persistence, and your existing login.
-- **codex** runs `codex exec` in the same kind of temp dir with the image attached via `-i`. It uses a `read-only` sandbox, `--ignore-user-config --ignore-rules --ephemeral`, memories/plugins/hooks disabled, a strict `--output-schema`, and your existing login.
-- **rules** is local and deterministic: an `appRules` bundle-ID → category map, then OCR keywords.
-
-CLI backends are found on `PATH` plus `~/.local/bin`, `~/.npm-global/bin`, `/opt/homebrew/bin` and `/usr/local/bin`, since an app started from Finder gets a minimal `PATH`. Their output gets JSON extraction (fences and prose stripped) and schema validation. A bad reply gets **one** corrective retry that quotes it, and then the backend fails. A timeout (`timeoutMs`) kills the whole process group.
-
-The chain moves to the next backend on error, unavailability, timeout, or confidence below `escalateBelowConfidence`, and keeps the most confident result it has seen. If the final category is unknown or its confidence is below `reviewBelowConfidence`, the shot goes to `misc`, gets a `review` Finder tag, and appears under Needs Review with the model's suggestion. If every backend fails, the file stays in the inbox, is retried after `retryDelayMs` up to `maxAttempts` times, and shows under Failed.
-
-> **Apple's confidence is uncalibrated on macOS 26.** In testing it answered 0.9 for every screenshot, right or wrong, so with the default chain it never escalates. Set `"confidenceCap": {"apple": 0.55}` to always get a cloud second opinion (apple still serves denylisted shots), or reorder `backends`.
+> **Tip:** on macOS 26, Apple's model reports high confidence even when it's guessing. Set `"confidenceCap": {"apple": 0.55}` so a cloud classifier always double-checks, or put a cloud classifier first.
 
 ## Privacy
 
-- **apple** and **rules** never leave the machine. OCR always runs locally.
-- `allowCloud: false` turns off claude-code and codex everywhere.
-- `cloudDenylist` (bundle IDs or app names; password managers are seeded) and `cloudDenylistDomains` (for example `"chase.com"`, which matches subdomains of the active browser tab) keep a shot to apple, or to rules if apple is unavailable.
-- `cloudWhenAppUnknown` (default `true`) decides what happens when no context was captured, which is the case for files found by a scan rather than a live event.
+- Text recognition always runs on your Mac. So do the **apple** and **rules** classifiers.
+- Set `"allowCloud": false` to never use Claude Code or Codex.
+- Screenshots of apps in `cloudDenylist` (password managers are listed by default), or of browser tabs on domains in `cloudDenylistDomains` (for example your bank), never leave your Mac. They use on-device classification only.
+- Shots never deletes a screenshot. Moves refuse to overwrite, and a screenshot that can't be classified stays where it was.
 
-## Config (`~/.config/shots/config.json`)
+## Configuration
 
-The defaults are written on first run, and any key can be overridden. **Reload Config** in the Status window picks up changes. These are the important ones:
+Settings live in `~/.config/shots/config.json`, created with defaults on first run. **Reload Config** in Status & Permissions applies changes.
 
 ```jsonc
 {
   "inbox": "~/Screenshots/_inbox",
   "outputRoot": "~/Screenshots",
   "categories": ["code", "design", "ui-reference", "docs", "chat", "finance", "receipts", "shopping", "travel", "social", "errors", "misc"],
-  "categoryHints": { "code": "source code, terminals, diffs, …" },
-  "backends": ["apple", "claude-code", "codex"],
+  "categoryHints": { "code": "source code, terminals, diffs, …" },   // one line per category, shown to the classifiers
+  "backends": ["apple", "claude-code", "codex"],                       // the classifier chain, in order
   "escalateBelowConfidence": 0.6,
   "reviewBelowConfidence": 0.6,
   "confidenceCap": {},
-  "timeoutMs": 30000,
   "allowCloud": true,
   "cloudDenylist": ["com.1password.1password", "…"],
   "cloudDenylistDomains": [],
   "copyToClipboard": true,
-  "concurrency": 1,                 // 1–2
-  "maxAttempts": 3,
+  "timeoutMs": 30000,
   "claudeCode": { "binary": "claude", "model": "sonnet", "effort": "low" },
-  "codex": { "binary": "codex", "model": "gpt-6-luna", "effort": "low" }
+  "codex": { "binary": "codex", "model": "gpt-6-luna", "effort": "low" }  // use a model your account can run
 }
 ```
 
-The index lives at `~/.local/share/shots/shots.db` (WAL). The `jobs` table makes the watcher idempotent and restart-safe: jobs interrupted mid-run resume, files with the same bytes are skipped as duplicates, and non-screenshots are skipped once and then left alone. Quitting the app lets the job in progress finish (up to 10 s); queued jobs wait for the next launch. Originals are never deleted. A move is a hard link followed by an unlink (copy, verify, unlink across volumes), and it refuses to overwrite.
+The index of filed screenshots is a SQLite database at `~/.local/share/shots/shots.db`, and logs go to `~/Library/Logs/shots/shots.log`.
+
+## Command line
+
+```
+shots search <query> [--limit N] [--json]   search screenshots by their text, title, tags, app or URL
+shots recat <file> [--category <name>]      move a screenshot to another category
+shots recat <file> --backend <name>         classify it again with apple, claude-code, codex or rules
+shots review [--failed]                     list screenshots that need review, or failed ones
+shots doctor                                check models, CLIs, permissions and config
+shots config [--json]                       print the active configuration
+```
+
+`recat` keeps any Finder tags you added yourself, and refuses to send a screenshot from an excluded app to a cloud classifier.
+
+## How it works
+
+```
+new file in the inbox ─▶ note the app/window/tab ─▶ wait until fully written ─▶ is it a screenshot?
+                      ─▶ copy to clipboard ─▶ read text (Vision) ─▶ classify (apple → claude-code → codex)
+                      ─▶ rename, move, tag in Finder ─▶ add to the search index
+```
+
+Everything is one Swift package in `app/`:
+
+| Target | Contents |
+|---|---|
+| `ShotsCore` | Config, the SQLite index, file handling, the classifier chain and backends, the pipeline and the inbox watcher (Foundation, SQLite3 and CryptoKit only) |
+| `ShotsNative` | The macOS side: Vision text recognition, app/window/tab context, screenshot metadata, Finder tags, clipboard, Foundation Models |
+| `ShotsKit` | View models and the controller that runs the watcher inside the app |
+| `Shots` | The SwiftUI app: window, Status & Permissions, menu bar extra, capture preview |
+| `ShotsCommand` | The `shots` command-line tool, shipped inside the app bundle |
+
+A few macOS details shaped the design:
+
+| macOS behavior | What Shots does |
+|---|---|
+| `mdls` knows nothing about a new screenshot until Spotlight indexes it | Reads the screenshot flags from the file's extended attributes, which are there immediately |
+| Screenshots are written to a hidden temporary file, then renamed | Rescans the inbox on any change instead of trusting event file names |
+| The on-device model has a 4,096-token context | Trims long text before asking it |
+| An app started from Finder gets a minimal `PATH` | Looks for `claude` and `codex` in the usual install locations too |
+
+The index tracks every file it has seen, so restarts are safe: interrupted work resumes, duplicates are skipped, and nothing is processed twice.
 
 ## Development
 
-Open `app/Package.swift` in Xcode. Each view has a `#Preview` backed by `Shot.samples`. From a terminal:
+Open `app/Package.swift` in Xcode; every view has a SwiftUI preview. From a terminal:
 
 ```bash
 swift build --package-path app
@@ -171,6 +189,16 @@ swift test --package-path app
 scripts/build-app.sh --install
 ```
 
-`scripts/ui-smoke` is a UI smoke test of the installed app driven with real input through [cua-driver](https://github.com/trycua/cua): typing in the search bar, ⌘K from search and from the grid, Esc, ⌘F. It changes no data and restores the search bar, but it sends foreground keys and clicks, so don't use the computer while it runs. `--keep` keeps its screenshots.
+**Signing.** `scripts/build-app.sh` signs with your first "Apple Development" certificate and falls back to ad-hoc signing. With ad-hoc signing, macOS forgets Shots' permissions on every rebuild. A free development certificate fixes that: Xcode → Settings → Accounts → sign in with your Apple ID → Manage Certificates → `+` → Apple Development.
 
-The tests use fixture PNGs (`app/Tests/ShotsCoreTests/Fixtures`; regenerate them with `swift make-fixtures.swift .` from that folder), a scripted `MockBackend`, a `FakeNative`, and fake `claude`/`codex` executables. Together they cover the escalation and privacy rules, the retry-on-invalid path, process-group timeouts, filing, deduplication and restart behavior, and the watcher's burst and retry handling. `NativeIntegrationTests` exercise the real Vision OCR, screenshot xattrs, Finder tags and Foundation Models status. `CompatibilityTests` and `FixtureStoreTests` open an index written by the original TypeScript daemon, to prove old indexes still work.
+**Tests.** The test suite covers the classifier chain, privacy rules, retries and timeouts, filing and deduplication, and the watcher, using mock classifiers and fake CLIs. Integration tests run the real text recognition, metadata and Finder tag code.
+
+**UI smoke test.** `scripts/ui-smoke` drives the installed app with real keystrokes and clicks through [cua-driver](https://github.com/trycua/cua) (search, ⌘K, ⌘F, Esc). It changes no data, but it uses the keyboard and mouse, so leave the computer alone for a minute while it runs.
+
+**Demo library.** `scripts/demo/seed-inbox.sh <dir>` renders a dozen made-up screenshots (a code editor, a receipt, a boarding pass…) into a folder as real screen captures. Point a test copy of Shots at that folder to get a library with no personal data; the images in this README were made that way.
+
+**App icon.** Drawn in code by `app/Resources/make-icon.swift`.
+
+## License
+
+Not yet chosen.
