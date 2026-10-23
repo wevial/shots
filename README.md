@@ -20,7 +20,7 @@
 Shots is built from source.
 
 ```bash
-git clone <this repo> shots
+git clone https://github.com/wevial/shots.git
 ```
 
 ```bash
