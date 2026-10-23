@@ -20,17 +20,20 @@ Everything is one Swift package in `app/`:
 
 Shots.app is the only process: it watches the inbox, files screenshots, and holds the macOS permissions. The CLI is for search and fixes from a terminal. Until October 2026 the daemon was a Bun/TypeScript LaunchAgent with a Swift helper. The port kept its config file, index schema and CLI output, and git history has the original.
 
+## Requirements
+
+macOS 26 or later with Apple Intelligence on, and Xcode with the macOS 27 SDK to build. The Claude Code and Codex CLIs are optional (cloud backends) and use whatever login they already have.
+
 ## Design notes
 
-| Check | Finding | Design consequence |
-|---|---|---|
-| `mdls` on a fresh capture | `kMDItemIsScreenCapture = (null)` for seconds after the file appears, and forever in folders Spotlight doesn't index | The same fields exist as `com.apple.metadata:kMDItemIsScreenCapture` / `…ScreenCaptureType` / `…GlobalRect` **xattrs** the moment the file lands. Those are read first; `mdls` is the fallback |
-| Capture types seen | `selection`, `display` (plus `window`) | Passed to the classifier as context |
-| Filenames | `Screenshot … at 10.22.28 AM.png` (narrow no-break space) | The original name is stored verbatim, and the new name is slugged |
-| Write pattern | Hidden `.Screenshot…` temp file, then rename | Any change in the inbox triggers a debounced rescan of the folder instead of trusting event file names. A periodic rescan covers missed events |
-| Foundation Models | `available`, 4096-token context, text-only on 26 | OCR is clipped to 4000 chars for apple. Image input sits behind `#available(macOS 27)` + `capabilities.contains(.vision)` in the same binary |
-| `claude` | `-p --output-format json --json-schema` returns `structured_output`. `--restricted --safe-mode` confine reads to cwd (a `/etc/hosts` read was denied) | Used as-is with `--tools Read --allowed-tools Read(./screenshot.png)` |
-| `codex` | `exec -i --output-schema -o --sandbox read-only --ignore-user-config` works. not every model name works on every account type | Default codex model is `gpt-6-luna` |
+| macOS / tool behavior | What Shots does about it |
+|---|---|
+| `mdls` reports nothing for a fresh screenshot until Spotlight indexes it, and never in folders Spotlight skips | Reads the same fields from the file's `com.apple.metadata:kMDItemIsScreenCapture` / `…ScreenCaptureType` xattrs, which are there the moment it lands; `mdls` is the fallback |
+| Screenshot names contain a narrow no-break space (`… at 10.22.28 AM.png`) | Stores the original name verbatim and slugs the new one |
+| macOS writes a hidden `.Screenshot…` file, then renames it | Treats any change in the inbox as "rescan the folder" instead of trusting event names, plus a periodic rescan |
+| Foundation Models has a 4096-token context and is text-only on macOS 26 | Clips OCR to 4000 characters for apple; image input turns on by itself on macOS 27 when the model reports vision |
+| `claude -p --json-schema` returns `structured_output`; `--restricted --safe-mode` confine file reads to the working directory | Runs it in a temp folder holding only the image, with `Read` allowed on that one file |
+| `codex exec` takes the image with `-i`, a strict `--output-schema`, and a `read-only` sandbox | Runs it the same way; not every model name works on every account type, so set `codex.model` to one yours accepts (default `gpt-6-luna`) |
 
 ## Install
 
