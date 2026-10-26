@@ -86,6 +86,14 @@ struct ImageEditorView: View {
                 .buttonStyle(.glassProminent)
                 .disabled(edit.isIdentity || isSaving)
                 .clickable()
+                // ⌘S saves too. A button has one shortcut, so this one is an invisible twin.
+                .background {
+                    Button("Save", action: save)
+                        .keyboardShortcut("s")
+                        .disabled(edit.isIdentity || isSaving)
+                        .opacity(0)
+                        .accessibilityHidden(true)
+                }
         }
         // The size the saved image will have, centered under the canvas.
         .overlay {
