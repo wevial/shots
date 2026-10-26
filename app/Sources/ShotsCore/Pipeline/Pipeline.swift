@@ -299,6 +299,70 @@ public func trash(
     deps.log.info("trashed", ["path": .string(shot.path)])
 }
 
+/// How long a shot stays in Recently Deleted before it goes to the Trash.
+public let recentlyDeletedDays = 30
+
+/// Where Recently Deleted keeps its files: hidden, and on the library's volume so moving in
+/// and out is a rename.
+public func deletedFolder(_ config: Config) -> String {
+    Paths.join(config.outputRoot, ".deleted")
+}
+
+/// Puts a shot in Recently Deleted: its file moves to the hidden folder and the row is
+/// flagged, so `restore` can put both back. A shot whose file is already gone is flagged as is.
+public func softDelete(_ shot: ShotRow, deps: Deps) async throws -> ShotRow {
+    guard shot.deletedAt == nil else { return shot }
+    guard FileManager.default.fileExists(atPath: shot.path) else {
+        return try await deps.database.markDeleted(shot.id, path: shot.path, from: shot.path)
+    }
+    let dest = reserveDestination(in: deletedFolder(deps.config), name: Paths.basename(shot.path))
+    defer { releaseDestination(dest) }
+    try Files.safeMove(from: shot.path, to: dest)
+    do {
+        let deleted = try await deps.database.markDeleted(shot.id, path: dest, from: shot.path)
+        deps.log.info("deleted", ["path": .string(shot.path)])
+        return deleted
+    } catch {
+        try? Files.safeMove(from: dest, to: shot.path)
+        throw error
+    }
+}
+
+/// Brings a shot back from Recently Deleted to where it was, under a new name if that one
+/// was taken meanwhile.
+public func restore(_ shot: ShotRow, deps: Deps) async throws -> ShotRow {
+    guard shot.deletedAt != nil, let from = shot.deletedFrom else { return shot }
+    guard FileManager.default.fileExists(atPath: shot.path), shot.path != from else {
+        return try await deps.database.markRestored(shot.id, path: shot.path)
+    }
+    let dest = reserveDestination(in: Paths.dirname(from), name: Paths.basename(from))
+    defer { releaseDestination(dest) }
+    try Files.safeMove(from: shot.path, to: dest)
+    do {
+        let restored = try await deps.database.markRestored(shot.id, path: dest)
+        deps.log.info("restored", ["path": .string(dest)])
+        return restored
+    } catch {
+        try? Files.safeMove(from: dest, to: shot.path)
+        throw error
+    }
+}
+
+/// Sends whatever has been in Recently Deleted for `recentlyDeletedDays` to the Trash.
+/// Returns how many went.
+@discardableResult
+public func sweepDeleted(
+    now: Date = .now, deps: Deps,
+    moveToTrash: (URL) throws -> Void = { try FileManager.default.trashItem(at: $0, resultingItemURL: nil) }
+) async throws -> Int {
+    let cutoff = Timestamp.string(from: now.addingTimeInterval(-Double(recentlyDeletedDays) * 86_400))
+    let expired = try await deps.database.deletedShots(before: cutoff)
+    for shot in expired {
+        try await trash(shot, deps: deps, moveToTrash: moveToTrash)
+    }
+    return expired.count
+}
+
 /// Copies a shot's file next to it as "<title> copy" and indexes the copy with everything the
 /// original knows (text, context, tags), so the copy can be edited and the original kept.
 public func duplicate(_ shot: ShotRow, deps: Deps) async throws -> ShotRow {

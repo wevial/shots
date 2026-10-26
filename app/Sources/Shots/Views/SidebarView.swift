@@ -1,8 +1,9 @@
 import ShotsKit
 import SwiftUI
 
-/// Scopes: All, Needs Review, Failed, Clean Up, then one row per category, each with a count.
-/// Categories with nothing in them fold under "More". Selecting a row sets `model.scope`.
+/// Scopes: All, Needs Review, Failed, Clean Up, then one row per category, each with a count,
+/// then Recently Deleted. Categories with nothing in them fold under "More". Selecting a row
+/// sets `model.scope`.
 struct SidebarView: View {
     @Environment(AppModel.self) private var model
     @AppStorage("sidebarShowsEmptyCategories") private var showsEmpty = false
@@ -30,6 +31,9 @@ struct SidebarView: View {
                     }
                     .clickable()
                 }
+            }
+            Section {
+                row(.deleted)
             }
         }
         // Below ~200 pt the section header and More's chevron get clipped.

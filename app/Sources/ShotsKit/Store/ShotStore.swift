@@ -14,6 +14,9 @@ public actor ShotStore {
     public nonisolated let path: String
     /// Whether the index has the scratch columns yet (the app's own `Database` adds them).
     private var hasScratchColumns = false
+    /// Whether the index has Recently Deleted's columns yet: the daemon adds them when it
+    /// opens an older index, which may be after this store did.
+    private var knowsDeletes = false
 
     public init(path: String) throws {
         guard FileManager.default.fileExists(atPath: path) else {
@@ -28,11 +31,12 @@ public actor ShotStore {
     public func shots(
         in scope: SidebarScope, matching search: String = "", limit: Int = 5000, cleanupCutoff: Date = .now
     ) throws -> [Shot] {
-        var conditions: [String] = []
+        guard try tracksDeletes() || scope != .deleted else { return [] }
+        var conditions = [scope == .deleted ? "s.deleted_at is not null" : try inLibrary("s.")]
         var bindings: [SQLiteConnection.Binding] = []
 
         switch scope {
-        case .all: break
+        case .all, .deleted: break
         case .review: conditions.append("s.review = 1")
         case .category(let name):
             conditions.append("s.category = ?")
@@ -52,10 +56,12 @@ public actor ShotStore {
             bindings.insert(.text(fts), at: 0)
             // Column weights: title, ocr_text, tags_text, category, app_name, window_title, url, url_title, original_name.
             order = "bm25(shots_fts, 5.0, 1.0, 3.0, 2.0, 1.0, 2.0, 1.0, 2.0, 1.0)"
+        } else if scope == .deleted {
+            order = "s.deleted_at desc, s.id desc"
         } else {
             order = "s.captured_at desc, s.id desc"
         }
-        if !conditions.isEmpty { sql += " where " + conditions.joined(separator: " and ") }
+        sql += " where " + conditions.joined(separator: " and ")
         sql += " order by \(order) limit ?"
         bindings.append(.int(Int64(limit)))
 
@@ -63,7 +69,7 @@ public actor ShotStore {
     }
 
     public func recentShots(limit: Int = 5) throws -> [Shot] {
-        try db.query("select * from shots order by captured_at desc, id desc limit ?", [.int(Int64(limit))], row: Self.shot)
+        try db.query("select * from shots where \(try inLibrary()) order by captured_at desc, id desc limit ?", [.int(Int64(limit))], row: Self.shot)
     }
 
     public func shot(id: Shot.ID) throws -> Shot? {
@@ -75,19 +81,27 @@ public actor ShotStore {
     }
 
     public func counts(cleanupCutoff: Date = .now) throws -> ScopeCounts {
-        let totals = try db.query("select count(*) as n, coalesce(sum(review), 0) as review from shots") {
-            (all: Int($0.int("n") ?? 0), review: Int($0.int("review") ?? 0))
-        }.first ?? (all: 0, review: 0)
+        let inLibrary = try inLibrary()
+        let totals = try db.query(
+            """
+            select count(*) filter (where \(inLibrary)) as n,
+              count(*) filter (where \(inLibrary) and review = 1) as review,
+              count(*) filter (where not (\(inLibrary))) as deleted
+            from shots
+            """
+        ) {
+            (all: Int($0.int("n") ?? 0), review: Int($0.int("review") ?? 0), deleted: Int($0.int("deleted") ?? 0))
+        }.first ?? (all: 0, review: 0, deleted: 0)
         let failed = try db.query("select count(*) as n from jobs where status = 'failed'") { Int($0.int("n") ?? 0) }.first ?? 0
-        let byCategory = try db.query("select category, count(*) as n from shots group by category") {
+        let byCategory = try db.query("select category, count(*) as n from shots where \(inLibrary) group by category") {
             ($0.string("category") ?? "", Int($0.int("n") ?? 0))
         }
         var cleanup = 0, unjudged = 0
         if try scratchColumnsExist() {
-            cleanup = try db.query("select count(*) as n from shots s where \(Self.cleanupCondition)", [.text(Timestamp.string(from: cleanupCutoff))]) {
+            cleanup = try db.query("select count(*) as n from shots s where \(Self.cleanupCondition) and \(try self.inLibrary("s."))", [.text(Timestamp.string(from: cleanupCutoff))]) {
                 Int($0.int("n") ?? 0)
             }.first ?? 0
-            unjudged = try db.query("select count(*) as n from shots where scratch is null and kept = 0") { Int($0.int("n") ?? 0) }.first ?? 0
+            unjudged = try db.query("select count(*) as n from shots where scratch is null and kept = 0 and \(inLibrary)") { Int($0.int("n") ?? 0) }.first ?? 0
         }
         return ScopeCounts(
             all: totals.all,
@@ -95,6 +109,7 @@ public actor ShotStore {
             failed: failed,
             cleanup: cleanup,
             unjudged: unjudged,
+            deleted: totals.deleted,
             byCategory: Dictionary(byCategory, uniquingKeysWith: +)
         )
     }
@@ -116,6 +131,19 @@ public actor ShotStore {
     /// Cheap enough to poll every couple of seconds.
     public func dataVersion() throws -> Int64 {
         try db.query("pragma data_version") { $0.int("data_version") ?? 0 }.first ?? 0
+    }
+
+    /// The condition for a shot in the library rather than Recently Deleted (always true in an
+    /// index that doesn't track deletes yet). `table` prefixes the column, e.g. `s.`.
+    private func inLibrary(_ table: String = "") throws -> String {
+        try tracksDeletes() ? "\(table)deleted_at is null" : "1"
+    }
+
+    private func tracksDeletes() throws -> Bool {
+        if !knowsDeletes {
+            knowsDeletes = try db.query("pragma table_info(shots)") { $0.string("name") }.contains("deleted_at")
+        }
+        return knowsDeletes
     }
 
     // MARK: Row mapping

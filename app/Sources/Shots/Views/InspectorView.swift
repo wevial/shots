@@ -5,6 +5,7 @@ import SwiftUI
 /// review suggestion, tags, metadata, and OCR text.
 struct InspectorView: View {
     @Environment(AppModel.self) private var model
+    @Environment(MainWindowState.self) private var window
     let shot: Shot
 
     private var isBusy: Bool { model.isRecategorizing(shot) }
@@ -21,12 +22,16 @@ struct InspectorView: View {
                     .font(.title3.bold())
                     .textSelection(.enabled)
 
-                ActionTiles(shot: shot)
+                if shot.isDeleted {
+                    deletedActions
+                } else {
+                    ActionTiles(shot: shot)
 
-                classificationMenus
+                    classificationMenus
 
-                if shot.needsReview, let suggestion = shot.suggestedCategory {
-                    suggestionCallout(suggestion)
+                    if shot.needsReview, let suggestion = shot.suggestedCategory {
+                        suggestionCallout(suggestion)
+                    }
                 }
 
                 if shot.isScratch {
@@ -50,6 +55,20 @@ struct InspectorView: View {
     }
 
     // MARK: - Sections
+
+    /// In Recently Deleted: back to the library, or on to the Trash.
+    private var deletedActions: some View {
+        HStack(spacing: 8) {
+            Button("Restore", systemImage: "arrow.uturn.backward") { Task { await model.restore(shot) } }
+                .buttonStyle(.glassProminent)
+                .clickable()
+            Button("Delete Immediately…", role: .destructive) { window.confirmingPermanentDelete = .shot(shot) }
+                .buttonStyle(.glass)
+                .clickable()
+            Spacer(minLength: 0)
+        }
+        .controlSize(.large)
+    }
 
     /// Category and re-run as two compact menus on one row; the shot's current category is
     /// checked. Choosing either moves the file, so both lock while a recat runs.

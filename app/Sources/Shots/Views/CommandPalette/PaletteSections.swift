@@ -6,6 +6,17 @@ import SwiftUI
 extension PaletteSection {
     /// Actions on the selected screenshot, under its title.
     static func selection(_ shot: Shot, model: AppModel, window: MainWindowState) -> PaletteSection {
+        if shot.isDeleted {
+            return PaletteSection(id: "selection", title: shot.displayTitle, commands: [
+                PaletteCommand(id: "restore", title: "Restore", systemImage: "arrow.uturn.backward") {
+                    Task { await model.restore(shot) }
+                },
+                PaletteCommand(id: "quick-look", title: "Quick Look", systemImage: "eye", shortcut: "Space") { model.quickLook(shot) },
+                PaletteCommand(id: "delete-now", title: "Delete Immediately", systemImage: "trash", shortcut: "⌘⌫") {
+                    window.confirmingPermanentDelete = .shot(shot)
+                },
+            ])
+        }
         var commands = [
             PaletteCommand(id: "copy-image", title: "Copy Image", systemImage: "doc.on.doc", shortcut: "⌘C") { model.copyImage(shot) },
             PaletteCommand(id: "edit", title: "Edit Image", systemImage: "crop", shortcut: "⌘E") { window.editingShot = shot },
@@ -16,8 +27,8 @@ extension PaletteSection {
             PaletteCommand(id: "duplicate", title: "Duplicate", systemImage: "plus.square.on.square", shortcut: "⌘D") {
                 Task { await model.duplicate(shot) }
             },
-            PaletteCommand(id: "trash", title: "Move to Trash", systemImage: "trash", shortcut: "⌘⌫") {
-                Task { await model.moveToTrash(shot) }
+            PaletteCommand(id: "delete", title: "Delete", systemImage: "trash", shortcut: "⌘⌫") {
+                Task { await model.delete(shot) }
             },
         ]
 
@@ -51,14 +62,14 @@ extension PaletteSection {
 
     /// Every sidebar scope.
     static func goTo(model: AppModel) -> PaletteSection {
-        let scopes: [SidebarScope] = [.all, .review, .failed, .cleanup] + model.categories.map { .category($0) }
+        let scopes: [SidebarScope] = [.all, .review, .failed, .cleanup] + model.categories.map { .category($0) } + [.deleted]
         let commands = scopes.map { scope in
             let (symbol, tint): (String, Color?) = switch scope {
             case .category(let name): (SidebarView.categorySymbol(name), Theme.color(for: name))
             case .review: (scope.systemImage, .orange)
             case .failed: (scope.systemImage, .red)
             case .cleanup: (scope.systemImage, .purple)
-            case .all: (scope.systemImage, nil)
+            case .all, .deleted: (scope.systemImage, nil)
             }
             return PaletteCommand(id: "go.\(scope.title)", title: scope.title, systemImage: symbol, tint: tint) {
                 model.scope = scope

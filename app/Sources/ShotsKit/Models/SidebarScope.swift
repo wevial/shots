@@ -5,6 +5,7 @@ public enum SidebarScope: Hashable, Sendable {
     case failed
     /// Scratch shots old enough to delete.
     case cleanup
+    case deleted
     case category(String)
 
     public var title: String {
@@ -13,6 +14,7 @@ public enum SidebarScope: Hashable, Sendable {
         case .review: "Needs Review"
         case .failed: "Failed"
         case .cleanup: "Clean Up"
+        case .deleted: "Recently Deleted"
         case .category(let name): name
         }
     }
@@ -23,6 +25,7 @@ public enum SidebarScope: Hashable, Sendable {
         case .review: "exclamationmark.circle"
         case .failed: "xmark.octagon"
         case .cleanup: "sparkles"
+        case .deleted: "trash"
         case .category: "folder"
         }
     }
@@ -36,14 +39,19 @@ public struct ScopeCounts: Equatable, Sendable {
     public var cleanup: Int
     /// Shots filed before the classifier judged scratch.
     public var unjudged: Int
+    public var deleted: Int
     public var byCategory: [String: Int]
 
-    public init(all: Int = 0, review: Int = 0, failed: Int = 0, cleanup: Int = 0, unjudged: Int = 0, byCategory: [String: Int] = [:]) {
+    public init(
+        all: Int = 0, review: Int = 0, failed: Int = 0, cleanup: Int = 0, unjudged: Int = 0, deleted: Int = 0,
+        byCategory: [String: Int] = [:]
+    ) {
         self.all = all
         self.review = review
         self.failed = failed
         self.cleanup = cleanup
         self.unjudged = unjudged
+        self.deleted = deleted
         self.byCategory = byCategory
     }
 
@@ -53,6 +61,7 @@ public struct ScopeCounts: Equatable, Sendable {
         case .review: review
         case .failed: failed
         case .cleanup: cleanup
+        case .deleted: deleted
         case .category(let name): byCategory[name] ?? 0
         }
     }

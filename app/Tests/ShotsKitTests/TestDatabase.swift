@@ -30,14 +30,14 @@ final class TestDatabase {
 
     func insertShot(
         id: Int, category: String, title: String, ocr: String = "", capturedAt: String, review: Bool = false,
-        scratch: Bool? = nil, kept: Bool = false
+        scratch: Bool? = nil, kept: Bool = false, deletedAt: String? = nil
     ) throws {
         try exec("""
             insert into shots (id, path, original_name, sha256, captured_at, processed_at, ocr_text, category,
-                               tags_json, tags_text, title, confidence, backend, review, scratch, kept)
+                               tags_json, tags_text, title, confidence, backend, review, scratch, kept, deleted_at)
             values (\(id), '/tmp/shot-\(id).png', 'Screenshot \(id).png', 'sha\(id)', '\(capturedAt)', '\(capturedAt)',
                     '\(ocr)', '\(category)', '["tag\(id)"]', 'tag\(id)', '\(title)', 0.8, 'apple', \(review ? 1 : 0),
-                    \(scratch.map { $0 ? "1" : "0" } ?? "null"), \(kept ? 1 : 0))
+                    \(scratch.map { $0 ? "1" : "0" } ?? "null"), \(kept ? 1 : 0), \(deletedAt.map { "'\($0)'" } ?? "null"))
             """)
     }
 
@@ -61,7 +61,8 @@ final class TestDatabase {
           url text, url_title text, capture_type text, width integer, height integer, ocr_text text not null default '',
           category text not null, suggested_category text, tags_json text not null default '[]',
           tags_text text not null default '', title text not null, confidence real not null, backend text not null,
-          review integer not null default 0, attempts_json text, scratch integer, kept integer not null default 0
+          review integer not null default 0, attempts_json text, scratch integer, kept integer not null default 0,
+          deleted_at text, deleted_from text
         );
         create virtual table shots_fts using fts5(
           title, ocr_text, tags_text, category, app_name, window_title, url, url_title, original_name,

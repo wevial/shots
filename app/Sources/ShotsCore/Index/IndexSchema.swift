@@ -1,15 +1,19 @@
 /// The index schema, from the original TypeScript daemon (src/db.ts, now in git history) so
 /// indexes it created keep working. Everything is `if not exists`, so running it on an existing
-/// index changes nothing. One change since: `shots.sha256` isn't unique, because a duplicated
-/// shot has the same bytes as its original (see `Schema.migrate`). Columns added since are in
+/// index changes nothing. Changes since, applied by `Schema.migrate`: `shots.sha256` isn't
+/// unique, because a duplicated shot has the same bytes as its original; and the columns in
 /// `columns`.
 enum Schema {
-    /// Added after the TypeScript daemon; `Database` adds whichever an index is missing.
+    /// Added after the TypeScript daemon; `migrate` adds whichever an index is missing.
     ///   scratch: the classifier thinks it's a throwaway (null until judged)
     ///   kept: you said keep it anyway, so it never shows up in Clean Up again
+    ///   deleted_at: when it went to Recently Deleted, where it stays for 30 days
+    ///   deleted_from: the path it had before (`path` is its place in the hidden folder meanwhile)
     static let columns: [(table: String, name: String, definition: String)] = [
         ("shots", "scratch", "integer"),
         ("shots", "kept", "integer not null default 0"),
+        ("shots", "deleted_at", "text"),
+        ("shots", "deleted_from", "text"),
     ]
 
     static let sql = """
@@ -87,6 +91,17 @@ enum Schema {
 
     /// Brings an index made by an earlier version up to date. Safe to run every time.
     static func migrate(_ db: SQLiteConnection) throws {
+        try dropUniqueHash(db)
+        for column in columns {
+            let existing = try db.query("select name from pragma_table_info(?)", [.text(column.table)]) { $0.string("name") }
+            if !existing.contains(column.name) {
+                try db.execute("alter table \(column.table) add column \(column.name) \(column.definition)")
+            }
+        }
+        try db.execute("create index if not exists shots_deleted on shots(deleted_at)")
+    }
+
+    private static func dropUniqueHash(_ db: SQLiteConnection) throws {
         let ddl = try db.query("select sql from sqlite_master where type = 'table' and name = 'shots'") { $0.string("sql") ?? "" }
         guard let ddl = ddl.first, ddl.contains("sha256 text not null unique") else { return }
         // SQLite can't drop a constraint, so the table is rebuilt (sqlite.org/lang_altertable.html).

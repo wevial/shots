@@ -65,8 +65,9 @@ public actor LibrarySync {
 
     private func received(_ paths: [String], lastID: UInt64) {
         guard stream != nil else { return }
-        let inbox = deps.config.inbox + "/"
-        pending.formUnion(paths.filter { Files.isCandidate($0) && !$0.hasPrefix(inbox) })
+        // Recently Deleted's files only ever move in and out.
+        let skipped = [deps.config.inbox + "/", deletedFolder(deps.config) + "/"]
+        pending.formUnion(paths.filter { path in Files.isCandidate(path) && !skipped.contains { path.hasPrefix($0) } })
         lastEventID = lastID
         guard flush == nil else { return }
         flush = Task { await self.refreshPending() }

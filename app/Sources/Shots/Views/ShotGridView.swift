@@ -124,6 +124,8 @@ struct ShotGridView: View {
             } actions: {
                 CheckOlderShotsButton()
             }
+        } else if model.scope == .deleted {
+            ContentUnavailableView("No Recently Deleted Screenshots", systemImage: "trash")
         } else {
             ContentUnavailableView(
                 "No Screenshots", systemImage: "photo.on.rectangle",
@@ -133,6 +135,18 @@ struct ShotGridView: View {
 
     @ViewBuilder
     private func contextMenu(for shot: Shot) -> some View {
+        if shot.isDeleted {
+            Button("Restore") { Task { await model.restore(shot) } }
+            Button("Quick Look") { model.quickLook(shot) }
+            Divider()
+            Button("Delete Immediately…") { window.confirmingPermanentDelete = .shot(shot) }
+        } else {
+            libraryMenu(for: shot)
+        }
+    }
+
+    @ViewBuilder
+    private func libraryMenu(for shot: Shot) -> some View {
         let busy = model.isRecategorizing(shot)
 
         Menu("Move to") {
@@ -164,7 +178,7 @@ struct ShotGridView: View {
         Divider()
         Button("Duplicate") { Task { await model.duplicate(shot) } }
             .disabled(!shot.fileExists)
-        Button("Move to Trash") { Task { await model.moveToTrash(shot) } }
+        Button("Delete") { Task { await model.delete(shot) } }
     }
 }
 

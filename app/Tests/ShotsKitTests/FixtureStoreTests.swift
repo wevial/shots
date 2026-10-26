@@ -33,6 +33,8 @@ struct FixtureStoreTests {
         #expect(counts.review == 1)
         #expect(counts.failed == 1)
         #expect(counts.byCategory["errors"] == 2)
+        #expect(counts.deleted == 0) // From before Recently Deleted: nothing in it.
+        #expect(try await store.shots(in: .deleted).isEmpty)
         #expect(counts.count(for: .category("design")) == 1)
     }
 

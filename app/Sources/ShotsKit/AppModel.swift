@@ -52,6 +52,12 @@ public final class AppModel {
     /// The message for the error alert. Set it to nil to dismiss.
     public var lastError: String?
 
+    /// The shot just deleted, offered back in the undo toast until it times out.
+    public internal(set) var undoableDelete: Shot?
+    @ObservationIgnored private var undoTimeout: Task<Void, Never>?
+    /// How long the undo toast stays up.
+    public static let undoWindow: Duration = .seconds(5)
+
     // MARK: Dependencies
 
     /// The watcher and pipeline, running in this process.
@@ -373,36 +379,100 @@ public final class AppModel {
         return true
     }
 
-    /// Moves the shot's file to the Trash and drops it from the index; the selection moves to
-    /// its neighbor.
-    public func moveToTrash(_ shot: Shot) async {
-        guard daemon.state != .idle else {
-            lastError = "The screenshot engine isn't running, so screenshots can't be changed."
-            return
-        }
-        let index = shots.firstIndex { $0.id == shot.id }
+    /// Puts the shot in Recently Deleted and offers it back in the undo toast; the selection
+    /// moves to its neighbor.
+    public func delete(_ shot: Shot) async {
+        guard ensureEngine() else { return }
         do {
-            try await daemon.trash(shotID: shot.id)
+            try await daemon.delete(shotID: shot.id)
         } catch {
             lastError = error.localizedDescription
             return
         }
+        drop(shot)
+        offerUndo(shot)
+        await reload()
+    }
+
+    /// Restores the shot in the undo toast.
+    public func undoDelete() async {
+        guard let shot = undoableDelete else { return }
+        dismissUndo()
+        guard let restored = await restore(shot) else { return }
+        selectedShotID = restored.id
+    }
+
+    public func dismissUndo() {
+        undoTimeout?.cancel()
+        undoableDelete = nil
+    }
+
+    /// Brings a shot back from Recently Deleted to where it was. Nil when it failed (see `lastError`).
+    @discardableResult
+    public func restore(_ shot: Shot) async -> Shot? {
+        guard ensureEngine() else { return nil }
+        do {
+            let restored = try await daemon.restore(shotID: shot.id)
+            if scope == .deleted { drop(shot) }
+            await reload()
+            return restored
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// Sends shots in Recently Deleted to the Trash now, rather than when their 30 days are up.
+    public func deleteImmediately(_ shots: [Shot]) async {
+        guard ensureEngine() else { return }
+        for shot in shots {
+            do {
+                try await daemon.trash(shotID: shot.id)
+            } catch {
+                lastError = error.localizedDescription
+                break
+            }
+            drop(shot)
+        }
+        await reload()
+    }
+
+    /// Sends everything in Recently Deleted to the Trash.
+    public func emptyRecentlyDeleted() async {
+        guard let store, let deleted = try? await store.shots(in: .deleted) else { return }
+        await deleteImmediately(deleted)
+    }
+
+    private func offerUndo(_ shot: Shot) {
+        undoTimeout?.cancel()
+        undoableDelete = shot
+        undoTimeout = Task { [weak self] in
+            try? await Task.sleep(for: Self.undoWindow)
+            guard !Task.isCancelled else { return }
+            self?.undoableDelete = nil
+        }
+    }
+
+    /// Takes a shot off screen right away, moving the selection to its neighbor.
+    private func drop(_ shot: Shot) {
+        let index = shots.firstIndex { $0.id == shot.id }
         if quickLookURL == shot.fileURL { quickLookURL = nil }
         shots.removeAll { $0.id == shot.id }
         recentShots.removeAll { $0.id == shot.id }
         if selectedShotID == shot.id {
             selectedShotID = index.flatMap { shots.indices.contains($0) ? shots[$0].id : shots.last?.id }
         }
-        await reload()
+    }
+
+    private func ensureEngine() -> Bool {
+        guard daemon.state == .idle else { return true }
+        lastError = "The screenshot engine isn't running, so screenshots can't be changed."
+        return false
     }
 
     /// Copies the shot's file next to it as "<title> copy", indexes the copy and selects it.
     public func duplicate(_ shot: Shot) async {
-        guard daemon.state != .idle else {
-            lastError = "The screenshot engine isn't running, so screenshots can't be changed."
-            return
-        }
-        guard fileExists(shot.fileURL) else { return }
+        guard ensureEngine(), fileExists(shot.fileURL) else { return }
         do {
             let copy = try await daemon.duplicate(shotID: shot.id)
             await reload()

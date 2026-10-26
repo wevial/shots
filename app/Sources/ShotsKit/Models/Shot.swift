@@ -33,6 +33,8 @@ public struct Shot: Identifiable, Hashable, Sendable {
     public var needsReview: Bool
     /// The classifier thinks it's a throwaway and you haven't chosen to keep it.
     public var isScratch: Bool
+    /// When it went to Recently Deleted; nil for a shot in the library.
+    public var deletedAt: Date?
 
     public init(
         id: Int64,
@@ -57,7 +59,8 @@ public struct Shot: Identifiable, Hashable, Sendable {
         confidence: Double,
         backend: String,
         needsReview: Bool = false,
-        isScratch: Bool = false
+        isScratch: Bool = false,
+        deletedAt: Date? = nil
     ) {
         self.id = id
         self.path = path
@@ -82,6 +85,7 @@ public struct Shot: Identifiable, Hashable, Sendable {
         self.backend = backend
         self.needsReview = needsReview
         self.isScratch = isScratch
+        self.deletedAt = deletedAt
     }
 }
 
@@ -103,6 +107,15 @@ extension Shot {
     }
 
     public var displayTitle: String { title.isEmpty ? fileName : title }
+
+    public var isDeleted: Bool { deletedAt != nil }
+
+    /// Whole days left before Recently Deleted sends it to the Trash.
+    public func daysUntilPurge(now: Date = .now) -> Int? {
+        guard let deletedAt else { return nil }
+        let purge = deletedAt.addingTimeInterval(Double(recentlyDeletedDays) * 86_400)
+        return max(0, Int((purge.timeIntervalSince(now) / 86_400).rounded(.up)))
+    }
 }
 
 // MARK: - Decoding the CLI's JSON (`shots recat --json` prints a raw `shots` row)
@@ -201,7 +214,8 @@ extension Shot {
             confidence: row.confidence,
             backend: row.backend,
             needsReview: row.review,
-            isScratch: row.scratch == true && !row.kept
+            isScratch: row.scratch == true && !row.kept && row.deletedAt == nil,
+            deletedAt: row.deletedAt.flatMap(ISODate.parse)
         )
     }
 }

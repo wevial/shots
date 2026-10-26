@@ -57,6 +57,17 @@ struct CompatibilityTests {
         await #expect(throws: SQLiteError.self) { try await db.insertShot(copy) }
     }
 
+    @Test func addsRecentlyDeletedsColumns() async throws {
+        let db = try openFixture()
+        let columns = try SQLiteConnection(path: db.path).query("pragma table_info(shots)") { $0.string("name") ?? "" }
+        #expect(columns.suffix(2) == ["deleted_at", "deleted_from"])
+        let shot = try #require(try await db.reviewQueue().first)
+        _ = try await db.markDeleted(shot.id, path: "/elsewhere.png", from: shot.path)
+        #expect(try await db.reviewQueue().isEmpty)
+        #expect(try await db.stats().shots == 5)
+        _ = try Database(path: db.path) // Nothing left to migrate.
+    }
+
     @Test func removingAFiledShotUnlinksItsJob() async throws {
         let db = try openFixture()
         let jobs = try SQLiteConnection(path: db.path).query("select shot_id from jobs where shot_id is not null") { $0.int("shot_id") ?? 0 }

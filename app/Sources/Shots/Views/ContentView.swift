@@ -33,6 +33,14 @@ struct ContentView: View {
                     }
                 }
                 .navigationTitle(model.scope.title)
+                .overlay(alignment: .bottom) {
+                    if let shot = model.undoableDelete {
+                        UndoToast(shot: shot)
+                            .padding(.bottom, 20)
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                    }
+                }
+                .animation(.smooth(duration: 0.25), value: model.undoableDelete)
                 .background { Backdrop() }
                 // Let the backdrop show through the title bar instead of an opaque strip.
                 .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
@@ -72,12 +80,38 @@ struct ContentView: View {
                     TrashAllButton()
                 }
             }
+            if model.scope == .deleted {
+                ToolbarItem(placement: .primaryAction) {
+                    Button("Delete All") { window.confirmingPermanentDelete = .all }
+                        .disabled(model.counts.deleted == 0)
+                        .clickable()
+                }
+            }
             ToolbarItem(placement: .primaryAction) { inspectorToggle }
         }
         .onChange(of: window.searchFocusRequests) { focus = .search }
         .onChange(of: focus) { _, focus in window.searchHasFocus = focus == .search }
         .quickLookPreview($model.quickLookURL)
         .sheet(item: $window.editingShot) { ImageEditorView(shot: $0) }
+        .confirmationDialog(
+            permanentDeleteTitle,
+            isPresented: Binding(
+                get: { window.confirmingPermanentDelete != nil },
+                set: { if !$0 { window.confirmingPermanentDelete = nil } }
+            ),
+            presenting: window.confirmingPermanentDelete
+        ) { target in
+            Button(target.isAll ? "Delete All" : "Delete", role: .destructive) {
+                Task {
+                    switch target {
+                    case .shot(let shot): await model.deleteImmediately([shot])
+                    case .all: await model.emptyRecentlyDeleted()
+                    }
+                }
+            }
+        } message: { target in
+            Text(target.isAll ? "They move to the Trash." : "It moves to the Trash.")
+        }
         .alert("Something went wrong", isPresented: $model.isShowingError, presenting: model.lastError) { _ in
             Button("OK") {}
         } message: { message in
@@ -86,6 +120,14 @@ struct ContentView: View {
         // The narrowest layout that doesn't clip: the grid column sits under the floating
         // sidebar, so the sidebar counts twice, plus one card column, plus the inspector if open.
         .frame(minWidth: window.showsInspector ? 950 : 720, minHeight: 500)
+    }
+
+    private var permanentDeleteTitle: String {
+        switch window.confirmingPermanentDelete {
+        case .shot(let shot): "Delete “\(shot.displayTitle)” immediately?"
+        case .all: model.counts.deleted == 1 ? "Delete 1 screenshot immediately?" : "Delete \(model.counts.deleted) screenshots immediately?"
+        case nil: ""
+        }
     }
 
     /// From the search field into the results, selecting the first one if nothing is selected.
@@ -121,6 +163,33 @@ struct ContentView: View {
             ContentUnavailableView("No Selection", systemImage: "photo", description: Text("Select a screenshot to see its details."))
         }
     }
+}
+
+/// "Deleted …" with Undo (⌘Z) along the bottom of the window, for `AppModel.undoWindow`.
+private struct UndoToast: View {
+    @Environment(AppModel.self) private var model
+    let shot: Shot
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Text("Deleted “\(shot.displayTitle)”")
+                .lineLimit(1)
+                .truncationMode(.middle)
+            Button("Undo") { Task { await model.undoDelete() } }
+                .keyboardShortcut("z")
+                .buttonStyle(.glassProminent)
+                .clickable()
+        }
+        .padding(.leading, 16)
+        .padding(.trailing, 6)
+        .padding(.vertical, 6)
+        .frame(maxWidth: 420)
+        .glassEffect(.regular, in: .capsule)
+    }
+}
+
+extension MainWindowState.PermanentDelete {
+    var isAll: Bool { if case .all = self { true } else { false } }
 }
 
 #Preview {

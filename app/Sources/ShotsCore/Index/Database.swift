@@ -29,12 +29,6 @@ public actor Database {
         try db.execute("pragma foreign_keys = on")
         try db.execute(Schema.sql)
         try Schema.migrate(db)
-        for column in Schema.columns {
-            let existing = try db.query("select name from pragma_table_info(?)", [.text(column.table)]) { $0.string("name") }
-            if !existing.contains(column.name) {
-                try db.execute("alter table \(column.table) add column \(column.name) \(column.definition)")
-            }
-        }
         self.db = db
         self.path = path
     }
@@ -118,8 +112,10 @@ public actor Database {
 
     // MARK: Shots
 
+    /// A shot in the library with these bytes. Recently Deleted doesn't count: capturing the
+    /// same thing again files it.
     public func shot(bySha sha: String) throws -> ShotRow? {
-        try shots("select * from shots where sha256 = ?", [.text(sha)]).first
+        try shots("select * from shots where sha256 = ? and deleted_at is null", [.text(sha)]).first
     }
 
     public func shot(id: Int64) throws -> ShotRow? {
@@ -175,6 +171,27 @@ public actor Database {
         try shots("select * from shots where path = ?", [.text(path)]).first
     }
 
+    /// Puts a shot in Recently Deleted: its file is now at `path`, and was at `from`.
+    public func markDeleted(_ id: Int64, path: String, from: String, at date: String = Timestamp.now()) throws -> ShotRow {
+        try one(shots(
+            "update shots set path = ?, deleted_from = ?, deleted_at = ? where id = ? returning *",
+            [.text(path), .text(from), .text(date), .int(id)]
+        ))
+    }
+
+    /// Brings a shot back from Recently Deleted, its file now at `path`.
+    public func markRestored(_ id: Int64, path: String) throws -> ShotRow {
+        try one(shots(
+            "update shots set path = ?, deleted_from = null, deleted_at = null where id = ? returning *",
+            [.text(path), .int(id)]
+        ))
+    }
+
+    /// Shots that went to Recently Deleted before `date`, oldest first.
+    public func deletedShots(before date: String) throws -> [ShotRow] {
+        try shots("select * from shots where deleted_at < ? order by deleted_at", [.text(date)])
+    }
+
     /// Takes a shot out of the index for good. The job that filed it stays, unlinked.
     public func removeShot(_ id: Int64) throws {
         try db.execute("begin immediate")
@@ -207,21 +224,21 @@ public actor Database {
     /// Scratch shots captured before `cutoff` that nobody chose to keep, newest first.
     public func cleanupSuggestions(capturedBefore cutoff: Date) throws -> [ShotRow] {
         try shots(
-            "select * from shots where scratch = 1 and kept = 0 and captured_at < ? order by captured_at desc",
+            "select * from shots where scratch = 1 and kept = 0 and captured_at < ? and deleted_at is null order by captured_at desc",
             [.text(Timestamp.string(from: cutoff))]
         )
     }
 
     /// Shots filed before the classifier judged scratch, newest first.
     public func unjudgedShots() throws -> [ShotRow] {
-        try shots("select * from shots where scratch is null and kept = 0 order by captured_at desc")
+        try shots("select * from shots where scratch is null and kept = 0 and deleted_at is null order by captured_at desc")
     }
 
     /// Lookup for `recat`: the exact path first, then the original or current file name.
     public func findShot(_ ref: String, resolvedPath: String) throws -> ShotRow? {
-        if let exact = try shots("select * from shots where path = ?", [.text(resolvedPath)]).first { return exact }
+        if let exact = try shots("select * from shots where path = ? and deleted_at is null", [.text(resolvedPath)]).first { return exact }
         return try shots(
-            "select * from shots where original_name = ?1 or path like '%/' || ?2 order by id desc limit 1",
+            "select * from shots where (original_name = ?1 or path like '%/' || ?2) and deleted_at is null order by id desc limit 1",
             [.text(ref), .text(ref)]
         ).first
     }
@@ -235,24 +252,24 @@ public actor Database {
             """
             select s.*, snippet(shots_fts, 1, '[', ']', '…', 12) as snippet
             from shots_fts join shots s on s.id = shots_fts.rowid
-            where shots_fts match ? order by bm25(shots_fts, 5.0, 1.0, 3.0, 2.0, 1.0, 2.0, 1.0, 2.0, 1.0) limit ?
+            where shots_fts match ? and s.deleted_at is null order by bm25(shots_fts, 5.0, 1.0, 3.0, 2.0, 1.0, 2.0, 1.0, 2.0, 1.0) limit ?
             """,
             [.text(fts), .int(Int64(limit))]
         ) { SearchHit(shot: ShotRow(row: $0), snippet: $0.string("snippet") ?? "") }
     }
 
     public func reviewQueue() throws -> [ShotRow] {
-        try shots("select * from shots where review = 1 order by captured_at desc")
+        try shots("select * from shots where review = 1 and deleted_at is null order by captured_at desc")
     }
 
     public func stats() throws -> IndexStats {
         let jobs = try db.query("select status, count(*) n from jobs group by status") {
             ($0.string("status") ?? "", Int($0.int("n") ?? 0))
         }
-        let totals = try one(db.query("select count(*) n, coalesce(sum(review),0) review from shots") {
+        let totals = try one(db.query("select count(*) n, coalesce(sum(review),0) review from shots where deleted_at is null") {
             (shots: Int($0.int("n") ?? 0), review: Int($0.int("review") ?? 0))
         })
-        let byBackend = try db.query("select backend, count(*) n from shots group by backend") {
+        let byBackend = try db.query("select backend, count(*) n from shots where deleted_at is null group by backend") {
             IndexStats.BackendCount(backend: $0.string("backend") ?? "", count: Int($0.int("n") ?? 0))
         }
         return IndexStats(

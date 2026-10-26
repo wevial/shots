@@ -89,6 +89,10 @@ public struct ShotRow: Sendable, Equatable, Hashable, JSONRepresentable {
     public var scratch: Bool?
     /// You chose to keep it, so Clean Up never suggests it.
     public var kept: Bool
+    /// When it went to Recently Deleted; nil for a shot in the library.
+    public var deletedAt: String?
+    /// Where the file was before it went to Recently Deleted, so a restore puts it back.
+    public var deletedFrom: String?
 
     public var tags: [String] {
         (try? JSONDecoder().decode([String].self, from: Data(tagsJSON.utf8))) ?? []
@@ -123,6 +127,8 @@ public struct ShotRow: Sendable, Equatable, Hashable, JSONRepresentable {
         attemptsJSON = row.string("attempts_json")
         scratch = row.int("scratch").map { $0 != 0 }
         kept = (row.int("kept") ?? 0) != 0
+        deletedAt = row.string("deleted_at")
+        deletedFrom = row.string("deleted_from")
     }
 
     /// The raw row with the column names as keys, in column order: what `shots recat --json`
@@ -143,6 +149,7 @@ public struct ShotRow: Sendable, Equatable, Hashable, JSONRepresentable {
             "tags_json": .string(tagsJSON), "tags_text": .string(tagsText), "title": .string(title),
             "confidence": .number(confidence), "backend": .string(backend), "review": review ? 1 : 0,
             "attempts_json": JSONValue(attemptsJSON), "scratch": JSONValue(scratch.map { $0 ? 1 : 0 }), "kept": kept ? 1 : 0,
+            "deleted_at": JSONValue(deletedAt), "deleted_from": JSONValue(deletedFrom),
         ]
     }
 }

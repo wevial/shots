@@ -132,3 +132,55 @@ private func removeInstead(_ url: URL) throws { try FileManager.default.removeIt
         #expect(try await deps.database.shot(id: shot.id) == nil)
     }
 }
+
+@Suite struct RecentlyDeletedTests {
+    @Test func deleteHidesTheShotAndRestoreBringsItBack() async throws {
+        let (shot, deps) = try await filedShot(root: try tempRoot())
+        let deleted = try await softDelete(shot, deps: deps)
+        #expect(deleted.deletedAt != nil && deleted.deletedFrom == shot.path)
+        #expect(Paths.dirname(deleted.path) == deletedFolder(deps.config))
+        #expect(!FileManager.default.fileExists(atPath: shot.path))
+        #expect(try Files.sha256(deleted.path) == shot.sha256)
+        #expect(try await deps.database.search("hello").isEmpty)
+        // Capturing the same thing again files it.
+        #expect(try await deps.database.shot(bySha: shot.sha256) == nil)
+
+        let restored = try await restore(deleted, deps: deps)
+        #expect(restored.path == shot.path && restored.deletedAt == nil && restored.deletedFrom == nil)
+        #expect(FileManager.default.fileExists(atPath: shot.path))
+        #expect(!FileManager.default.fileExists(atPath: deleted.path))
+        #expect(try await deps.database.search("hello").map(\.shot.id) == [shot.id])
+    }
+
+    @Test func restoreTakesANewNameWhenTheOldOneIsTaken() async throws {
+        let (shot, deps) = try await filedShot(root: try tempRoot())
+        let deleted = try await softDelete(shot, deps: deps)
+        try FileManager.default.copyItem(atPath: deleted.path, toPath: shot.path)
+        let restored = try await restore(deleted, deps: deps)
+        #expect(restored.path == String(shot.path.dropLast(4)) + "-2.png")
+        #expect(FileManager.default.fileExists(atPath: restored.path))
+    }
+
+    @Test func aMissingFileIsDeletedAndRestoredAsIs() async throws {
+        let (shot, deps) = try await filedShot(root: try tempRoot())
+        try FileManager.default.removeItem(atPath: shot.path)
+        let deleted = try await softDelete(shot, deps: deps)
+        #expect(deleted.path == shot.path && deleted.deletedAt != nil)
+        #expect(try await restore(deleted, deps: deps).deletedAt == nil)
+    }
+
+    @Test func sweepTrashesOnlyWhatsPastThirtyDays() async throws {
+        let (shot, deps) = try await filedShot(root: try tempRoot())
+        let copy = try await duplicate(shot, deps: deps)
+        let old = try await softDelete(shot, deps: deps)
+        let recent = try await softDelete(copy, deps: deps)
+        let longAgo = Timestamp.string(from: .now.addingTimeInterval(-31 * 86_400))
+        _ = try await deps.database.markDeleted(old.id, path: old.path, from: shot.path, at: longAgo)
+
+        #expect(try await sweepDeleted(deps: deps, moveToTrash: removeInstead) == 1)
+        #expect(try await deps.database.shot(id: old.id) == nil)
+        #expect(!FileManager.default.fileExists(atPath: old.path))
+        #expect(try await deps.database.shot(id: recent.id)?.deletedAt != nil)
+        #expect(FileManager.default.fileExists(atPath: recent.path))
+    }
+}

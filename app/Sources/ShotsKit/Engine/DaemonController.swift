@@ -35,6 +35,8 @@ public final class DaemonController {
     /// Runs whenever the index is open, paused or not: edits made elsewhere still show up.
     @ObservationIgnored private var librarySync: LibrarySync?
     @ObservationIgnored private var activityTask: Task<Void, Never>?
+    /// Empties Recently Deleted of anything past its 30 days, at load and every few hours.
+    @ObservationIgnored private var sweepTask: Task<Void, Never>?
     /// Outlives each `Daemon`, which `load()` replaces, so readers never have to resubscribe.
     @ObservationIgnored private let captures = Broadcast<CaptureEvent>()
 
@@ -67,6 +69,7 @@ public final class DaemonController {
     public func load() async {
         await stopWatching()
         await stopLibrarySync()
+        sweepTask?.cancel()
         state = .starting
         Toolchain.augmentPath()
         do {
@@ -85,6 +88,7 @@ public final class DaemonController {
             return
         }
         await startLibrarySync()
+        startSweeping()
         if defaults.bool(forKey: Self.pausedKey) {
             state = .paused
         } else {
@@ -115,6 +119,7 @@ public final class DaemonController {
     public func shutdown() async {
         await stopWatching()
         await stopLibrarySync()
+        sweepTask?.cancel()
         await deps?.database.close()
         deps = nil
     }
@@ -175,6 +180,22 @@ public final class DaemonController {
         await librarySync.stop()
     }
 
+    private func startSweeping() {
+        guard let deps else { return }
+        let log = log
+        sweepTask = Task.detached {
+            while !Task.isCancelled {
+                do {
+                    let swept = try await sweepDeleted(deps: deps)
+                    if swept > 0 { log.info("emptied recently deleted", ["count": JSONValue(swept)]) }
+                } catch {
+                    log.error("recently deleted sweep failed", ["error": .string(errorMessage(error))])
+                }
+                try? await Task.sleep(for: .seconds(6 * 3600))
+            }
+        }
+    }
+
     /// `daemon-status.json`, which `shots doctor` reads: TCC grants belong to this process.
     private static func writeStatus(native: any Native, dataDir: String) async {
         func capture(_ value: () async throws -> JSONValue) async -> JSONValue {
@@ -233,6 +254,20 @@ public final class DaemonController {
     private func runningDeps() throws -> Deps {
         guard let deps else { throw ShotsError("The screenshot engine isn't running, so screenshots can't be changed.") }
         return deps
+    }
+
+    /// Puts the shot in Recently Deleted.
+    public func delete(shotID: Int64) async throws {
+        guard let deps else { throw ShotsError("The screenshot engine isn't running, so screenshots can't be changed.") }
+        guard let row = try await deps.database.shot(id: shotID) else { return } // Already gone.
+        _ = try await ShotsCore.softDelete(row, deps: deps)
+    }
+
+    /// Brings the shot back from Recently Deleted.
+    public func restore(shotID: Int64) async throws -> Shot {
+        guard let deps else { throw ShotsError("The screenshot engine isn't running, so screenshots can't be changed.") }
+        guard let row = try await deps.database.shot(id: shotID) else { throw ShotsError("That screenshot is no longer in the index.") }
+        return Shot(row: try await ShotsCore.restore(row, deps: deps))
     }
 
     /// Moves the shot's file to the Trash and takes it out of the index.

@@ -14,13 +14,21 @@ final class MainWindowState {
     var editingShot: Shot?
     /// Mirrors the search field's focus, so ⌘⌫ deletes text there instead of the selected shot.
     var searchHasFocus = false
+    /// What "Delete Immediately" is waiting on the user to confirm.
+    var confirmingPermanentDelete: PermanentDelete?
+
+    enum PermanentDelete {
+        case shot(Shot)
+        /// Everything in Recently Deleted.
+        case all
+    }
 
     /// Whether menu shortcuts that act on the selected shot should take keys: not while
     /// typing (search, palette) or editing.
     var acceptsShotShortcuts: Bool { !searchHasFocus && !showsPalette && editingShot == nil }
 }
 
-/// Keyboard shortcuts in the app's menus: Duplicate (⌘D) and Move to Trash (⌘⌫), Find (⌘F),
+/// Keyboard shortcuts in the app's menus: Duplicate (⌘D) and Delete (⌘⌫), Find (⌘F),
 /// Edit Image (⌘E), the command palette (⌘K), the inspector (⌥⌘I), and ⌘1–⌘9 for the sidebar
 /// rows in order.
 struct ShotsCommands: Commands {
@@ -30,12 +38,18 @@ struct ShotsCommands: Commands {
     var body: some Commands {
         CommandGroup(after: .newItem) {
             let shot = window.acceptsShotShortcuts ? model.selectedShot : nil
-            Button("Duplicate") { if let shot { Task { await model.duplicate(shot) } } }
-                .keyboardShortcut("d")
-                .disabled(shot?.fileExists != true)
-            Button("Move to Trash") { if let shot { Task { await model.moveToTrash(shot) } } }
-                .keyboardShortcut(.delete)
-                .disabled(shot == nil)
+            if let shot, shot.isDeleted {
+                Button("Restore") { Task { await model.restore(shot) } }
+                Button("Delete Immediately…") { window.confirmingPermanentDelete = .shot(shot) }
+                    .keyboardShortcut(.delete)
+            } else {
+                Button("Duplicate") { if let shot { Task { await model.duplicate(shot) } } }
+                    .keyboardShortcut("d")
+                    .disabled(shot?.fileExists != true)
+                Button("Delete") { if let shot { Task { await model.delete(shot) } } }
+                    .keyboardShortcut(.delete)
+                    .disabled(shot == nil)
+            }
         }
 
         CommandGroup(after: .pasteboard) {
@@ -44,7 +58,7 @@ struct ShotsCommands: Commands {
                 .keyboardShortcut("f")
             Button("Edit Image…") { window.editingShot = model.selectedShot }
                 .keyboardShortcut("e")
-                .disabled(model.selectedShot?.fileExists != true)
+                .disabled(model.selectedShot.map { !$0.fileExists || $0.isDeleted } ?? true)
         }
 
         CommandGroup(after: .sidebar) {

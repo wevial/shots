@@ -2,7 +2,8 @@ import ShotsKit
 import SwiftUI
 
 /// One grid card: thumbnail, title, relative date, category and review badges, a spinner
-/// while a recat is running on it, and a copy button while hovered.
+/// while a recat is running on it, and copy and delete buttons while hovered. In Recently
+/// Deleted it shows the days left instead of the date, and a restore button instead.
 struct ShotCardView: View {
     @Environment(AppModel.self) private var model
     let shot: Shot
@@ -23,7 +24,10 @@ struct ShotCardView: View {
                     }
                 }
                 .overlay(alignment: .bottom) {
-                    if isHovered && shot.fileExists {
+                    if isHovered && shot.isDeleted {
+                        RestoreStrip(shot: shot)
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                    } else if isHovered && shot.fileExists {
                         CopyStrip(shot: shot)
                             .transition(.move(edge: .bottom).combined(with: .opacity))
                     }
@@ -35,10 +39,16 @@ struct ShotCardView: View {
                 .lineLimit(1)
 
             HStack(spacing: 6) {
-                Text(shot.capturedAt, format: .relative(presentation: .named))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                Group {
+                    if let days = shot.daysUntilPurge() {
+                        Text(days == 1 ? "1 day" : "\(days) days")
+                    } else {
+                        Text(shot.capturedAt, format: .relative(presentation: .named))
+                    }
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
                 Spacer(minLength: 0)
                 if shot.needsReview {
                     Image(systemName: "exclamationmark.circle.fill")
@@ -48,6 +58,14 @@ struct ShotCardView: View {
             }
 
             CategoryBadge(category: shot.category)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                // An overlay, so showing it doesn't make the row taller.
+                .overlay(alignment: .trailing) {
+                    if isHovered && !shot.isDeleted {
+                        DeleteButton(shot: shot)
+                            .transition(.opacity)
+                    }
+                }
         }
         .padding(8)
         .modifier(CardSurface(isSelected: isSelected, isHovered: isHovered))
@@ -99,6 +117,49 @@ private struct CopyStrip: View {
                 // Opaque: a material lets the screenshot underneath show through the label.
                 .background(Color(nsColor: .controlBackgroundColor))
                 // A plain hairline: a Divider outside a stack draws vertically, down the middle.
+                .overlay(alignment: .top) {
+                    Rectangle().fill(.separator).frame(height: 1)
+                }
+                .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .clickable()
+    }
+}
+
+/// The trash can in a hovered card's bottom-right corner. Goes to Recently Deleted, with undo.
+private struct DeleteButton: View {
+    @Environment(AppModel.self) private var model
+    let shot: Shot
+    @State private var isHovered = false
+
+    var body: some View {
+        Button("Delete", systemImage: "trash") { Task { await model.delete(shot) } }
+            .labelStyle(.iconOnly)
+            .buttonStyle(.plain)
+            .foregroundStyle(isHovered ? AnyShapeStyle(.red) : AnyShapeStyle(.secondary))
+            .frame(width: 22, height: 22)
+            .contentShape(.rect)
+            .onHover { isHovered = $0 }
+            .help("Delete")
+            .clickable()
+    }
+}
+
+/// `CopyStrip`'s counterpart in Recently Deleted.
+private struct RestoreStrip: View {
+    @Environment(AppModel.self) private var model
+    let shot: Shot
+
+    var body: some View {
+        Button {
+            Task { await model.restore(shot) }
+        } label: {
+            Label("Restore", systemImage: "arrow.uturn.backward")
+                .font(.callout.weight(.medium))
+                .frame(maxWidth: .infinity)
+                .frame(height: 30)
+                .background(Color(nsColor: .controlBackgroundColor))
                 .overlay(alignment: .top) {
                     Rectangle().fill(.separator).frame(height: 1)
                 }

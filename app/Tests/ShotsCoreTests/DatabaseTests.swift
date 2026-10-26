@@ -145,7 +145,7 @@ struct DatabaseTests {
             "id", "path", "original_name", "sha256", "captured_at", "processed_at", "app_bundle_id", "app_name",
             "window_title", "url", "url_title", "capture_type", "width", "height", "ocr_text", "category",
             "suggested_category", "tags_json", "tags_text", "title", "confidence", "backend", "review", "attempts_json",
-            "scratch", "kept",
+            "scratch", "kept", "deleted_at", "deleted_from",
         ])
         #expect(shot.json["url"] == .null)
         #expect(shot.json["review"] == 0)

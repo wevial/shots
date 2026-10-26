@@ -92,7 +92,7 @@ extension AppModel {
             switch scope {
             case .all: true
             case .review: shot.needsReview
-            case .failed: false
+            case .failed, .deleted: false
             case .cleanup: shot.isScratch
             case .category(let name): shot.category == name
             }
