@@ -13,7 +13,8 @@ struct InspectorView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
                 ThumbnailView(url: shot.fileURL, maxSize: 480, revision: shot.sha256)
-                    .frame(maxWidth: .infinity)
+                    // Capped, so a tall, narrow shot doesn't push everything below out of view.
+                    .frame(maxWidth: .infinity, maxHeight: 280)
                     .draggable(shot.fileURL)
 
                 Text(shot.displayTitle)
