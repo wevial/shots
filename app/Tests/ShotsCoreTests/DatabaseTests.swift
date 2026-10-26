@@ -102,12 +102,14 @@ struct DatabaseTests {
         #expect(try await db.search("traceback").isEmpty)
     }
 
-    @Test func duplicateShaIsRejected() async throws {
+    /// A duplicated shot has its original's bytes. The inbox's dedupe lookup still finds one.
+    @Test func sameShaIsAllowedForCopies() async throws {
         let db = try Database(path: ":memory:")
-        _ = try await db.insertShot(newShot(1))
-        var dup = newShot(2)
-        dup.sha256 = "sha-1"
-        await #expect(throws: SQLiteError.self) { _ = try await db.insertShot(dup) }
+        let original = try await db.insertShot(newShot(1))
+        var copy = newShot(2)
+        copy.sha256 = "sha-1"
+        _ = try await db.insertShot(copy)
+        #expect(try await db.shot(bySha: "sha-1")?.sha256 == original.sha256)
     }
 
     @Test func reviewQueueAndStats() async throws {

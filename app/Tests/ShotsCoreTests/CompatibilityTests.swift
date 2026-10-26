@@ -33,4 +33,36 @@ struct CompatibilityTests {
         #expect(try await db.search("zanzibar").map(\.shot.id) == [shot.id])
         #expect(try await db.stats().shots == 7)
     }
+
+    @Test func dropsTheUniqueHashSoDuplicatesFit() async throws {
+        let db = try openFixture()
+        let original = try #require(try await db.reviewQueue().first)
+        let ddl = try SQLiteConnection(path: db.path).query("select sql from sqlite_master where name = 'shots'") { $0.string("sql") ?? "" }
+        #expect(ddl.first?.contains("sha256 text not null unique") == false)
+
+        var copy = NewShot(
+            path: original.path + "-copy.png", originalName: original.originalName, sha256: original.sha256,
+            capturedAt: original.capturedAt, processedAt: Timestamp.now(), ocrText: "walrus",
+            category: original.category, title: "Copy", confidence: 1, backend: "manual")
+        let inserted = try await db.insertShot(copy)
+        #expect(try await db.stats().shots == 7)
+        #expect(try await db.search("walrus").map(\.shot.id) == [inserted.id])
+        // Rows, ids and the search index came through the rebuild.
+        #expect(try await db.shot(id: original.id) == original)
+        #expect(try await db.search(original.title).contains { $0.shot.id == original.id })
+
+        // A second open finds nothing left to migrate; paths are still unique.
+        _ = try Database(path: db.path)
+        copy.sha256 = "other"
+        await #expect(throws: SQLiteError.self) { try await db.insertShot(copy) }
+    }
+
+    @Test func removingAFiledShotUnlinksItsJob() async throws {
+        let db = try openFixture()
+        let jobs = try SQLiteConnection(path: db.path).query("select shot_id from jobs where shot_id is not null") { $0.int("shot_id") ?? 0 }
+        let id = try #require(jobs.first)
+        try await db.removeShot(id)
+        #expect(try await db.shot(id: id) == nil)
+        #expect(try await db.stats().shots == 5)
+    }
 }

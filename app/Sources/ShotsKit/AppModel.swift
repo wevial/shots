@@ -373,6 +373,45 @@ public final class AppModel {
         return true
     }
 
+    /// Moves the shot's file to the Trash and drops it from the index; the selection moves to
+    /// its neighbor.
+    public func moveToTrash(_ shot: Shot) async {
+        guard daemon.state != .idle else {
+            lastError = "The screenshot engine isn't running, so screenshots can't be changed."
+            return
+        }
+        let index = shots.firstIndex { $0.id == shot.id }
+        do {
+            try await daemon.trash(shotID: shot.id)
+        } catch {
+            lastError = error.localizedDescription
+            return
+        }
+        if quickLookURL == shot.fileURL { quickLookURL = nil }
+        shots.removeAll { $0.id == shot.id }
+        recentShots.removeAll { $0.id == shot.id }
+        if selectedShotID == shot.id {
+            selectedShotID = index.flatMap { shots.indices.contains($0) ? shots[$0].id : shots.last?.id }
+        }
+        await reload()
+    }
+
+    /// Copies the shot's file next to it as "<title> copy", indexes the copy and selects it.
+    public func duplicate(_ shot: Shot) async {
+        guard daemon.state != .idle else {
+            lastError = "The screenshot engine isn't running, so screenshots can't be changed."
+            return
+        }
+        guard fileExists(shot.fileURL) else { return }
+        do {
+            let copy = try await daemon.duplicate(shotID: shot.id)
+            await reload()
+            selectedShotID = copy.id
+        } catch {
+            lastError = error.localizedDescription
+        }
+    }
+
     private func replace(_ updated: Shot) {
         // recat moved the file; keep an open Quick Look panel pointing at it.
         if let old = shots.first(where: { $0.id == updated.id }), quickLookURL == old.fileURL {

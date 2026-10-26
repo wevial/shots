@@ -28,6 +28,7 @@ public actor Database {
         try db.execute("pragma busy_timeout = 5000")
         try db.execute("pragma foreign_keys = on")
         try db.execute(Schema.sql)
+        try Schema.migrate(db)
         for column in Schema.columns {
             let existing = try db.query("select name from pragma_table_info(?)", [.text(column.table)]) { $0.string("name") }
             if !existing.contains(column.name) {
@@ -174,15 +175,21 @@ public actor Database {
         try shots("select * from shots where path = ?", [.text(path)]).first
     }
 
-    /// Undoes an insert whose file move failed.
-    public func deleteShot(_ id: Int64) throws {
-        try db.run("delete from shots where id = ?", [.int(id)])
+    /// Takes a shot out of the index for good. The job that filed it stays, unlinked.
+    public func removeShot(_ id: Int64) throws {
+        try db.execute("begin immediate")
+        do {
+            try db.run("update jobs set shot_id = null where shot_id = ?", [.int(id)])
+            try db.run("delete from shots where id = ?", [.int(id)])
+            try db.execute("commit")
+        } catch {
+            try? db.execute("rollback")
+            throw error
+        }
     }
 
-    /// Drops a filed shot from the index (its file went to the Trash). Its job stays as a
-    /// record, unlinked.
-    public func removeShot(_ id: Int64) throws {
-        try db.run("update jobs set shot_id = null where shot_id = ?", [.int(id)])
+    /// Undoes an insert whose file move failed.
+    public func deleteShot(_ id: Int64) throws {
         try db.run("delete from shots where id = ?", [.int(id)])
     }
 

@@ -96,3 +96,39 @@ extension LibrarySyncTests {
         try await until { try await deps.database.shot(id: shot.id)?.ocrText == "cropped text" }
     }
 }
+
+/// Stands in for the Trash, which tests mustn't fill.
+private func removeInstead(_ url: URL) throws { try FileManager.default.removeItem(at: url) }
+
+@Suite struct TrashAndDuplicateTests {
+    @Test func duplicateCopiesTheFileAndIndexesIt() async throws {
+        let (shot, deps) = try await filedShot(root: try tempRoot())
+        let copy = try await duplicate(shot, deps: deps)
+        #expect(copy.id != shot.id)
+        #expect(copy.title == "Code copy")
+        #expect(Paths.dirname(copy.path) == Paths.dirname(shot.path))
+        #expect(copy.path.hasSuffix("_code-copy.png"))
+        #expect(try Files.sha256(copy.path) == shot.sha256)
+        #expect(copy.ocrText == shot.ocrText && copy.category == shot.category && copy.tags == shot.tags)
+        #expect(FileManager.default.fileExists(atPath: shot.path))
+
+        // A second copy gets its own name.
+        let again = try await duplicate(shot, deps: deps)
+        #expect(again.path.hasSuffix("_code-copy-2.png"))
+    }
+
+    @Test func trashMovesTheFileAndForgetsTheShot() async throws {
+        let (shot, deps) = try await filedShot(root: try tempRoot())
+        try await trash(shot, deps: deps, moveToTrash: removeInstead)
+        #expect(!FileManager.default.fileExists(atPath: shot.path))
+        #expect(try await deps.database.shot(id: shot.id) == nil)
+        #expect(try await deps.database.search("hello").isEmpty)
+    }
+
+    @Test func trashingAMissingFileStillForgetsIt() async throws {
+        let (shot, deps) = try await filedShot(root: try tempRoot())
+        try FileManager.default.removeItem(atPath: shot.path)
+        try await trash(shot, deps: deps, moveToTrash: removeInstead)
+        #expect(try await deps.database.shot(id: shot.id) == nil)
+    }
+}

@@ -286,6 +286,53 @@ public func refreshContent(_ shot: ShotRow, deps: Deps) async throws -> ShotRow?
     return updated
 }
 
+/// Moves a shot's file to the Trash and takes it out of the index. A shot whose file is
+/// already gone just leaves the index. `moveToTrash` is for tests, which mustn't fill the real Trash.
+public func trash(
+    _ shot: ShotRow, deps: Deps,
+    moveToTrash: (URL) throws -> Void = { try FileManager.default.trashItem(at: $0, resultingItemURL: nil) }
+) async throws {
+    if FileManager.default.fileExists(atPath: shot.path) {
+        try moveToTrash(URL(filePath: shot.path))
+    }
+    try await deps.database.removeShot(shot.id)
+    deps.log.info("trashed", ["path": .string(shot.path)])
+}
+
+/// Copies a shot's file next to it as "<title> copy" and indexes the copy with everything the
+/// original knows (text, context, tags), so the copy can be edited and the original kept.
+public func duplicate(_ shot: ShotRow, deps: Deps) async throws -> ShotRow {
+    guard FileManager.default.fileExists(atPath: shot.path) else { throw ShotsError("file is gone: \(shot.path)") }
+    let title = "\(shot.title) copy"
+    let captured = try shot.capturedDate ?? Files.capturedAt(shot.path)
+    let dest = reserveDestination(
+        in: Paths.dirname(shot.path),
+        name: Files.targetName(captured: captured, title: title, ext: Paths.extname(shot.path))
+    )
+    defer { releaseDestination(dest) }
+
+    // Row first, then copy, as when filing: a failed copy takes the row back out.
+    let copy = try await deps.database.insertShot(NewShot(
+        path: dest, originalName: shot.originalName, sha256: shot.sha256,
+        capturedAt: shot.capturedAt, processedAt: Timestamp.now(),
+        appBundleId: shot.appBundleId, appName: shot.appName, windowTitle: shot.windowTitle,
+        url: shot.url, urlTitle: shot.urlTitle, captureType: shot.captureType,
+        width: shot.width, height: shot.height, ocrText: shot.ocrText,
+        category: shot.category, suggestedCategory: shot.suggestedCategory,
+        tags: shot.tags, title: title, confidence: shot.confidence,
+        backend: shot.backend, review: shot.review, attemptsJSON: shot.attemptsJSON
+    ))
+    do {
+        // Keeps Finder tags and the screenshot markers, which are extended attributes.
+        try FileManager.default.copyItem(atPath: shot.path, toPath: dest)
+    } catch {
+        try await deps.database.deleteShot(copy.id)
+        throw error
+    }
+    deps.log.info("duplicated", ["from": .string(shot.path), "to": .string(dest)])
+    return copy
+}
+
 /// Re-classifies an indexed shot from its stored OCR and context (or files it under
 /// `options.category` by hand), then renames, moves and retags it. Throws when the file is
 /// gone, the category is unknown, or an explicit cloud backend is blocked by privacy rules.

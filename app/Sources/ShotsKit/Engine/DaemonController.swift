@@ -235,6 +235,20 @@ public final class DaemonController {
         return deps
     }
 
+    /// Moves the shot's file to the Trash and takes it out of the index.
+    public func trash(shotID: Int64) async throws {
+        guard let deps else { throw ShotsError("The screenshot engine isn't running, so screenshots can't be changed.") }
+        guard let row = try await deps.database.shot(id: shotID) else { return } // Already gone.
+        try await ShotsCore.trash(row, deps: deps)
+    }
+
+    /// Copies the shot's file next to it and indexes the copy.
+    public func duplicate(shotID: Int64) async throws -> Shot {
+        guard let deps else { throw ShotsError("The screenshot engine isn't running, so screenshots can't be changed.") }
+        guard let row = try await deps.database.shot(id: shotID) else { throw ShotsError("That screenshot is no longer in the index.") }
+        return Shot(row: try await ShotsCore.duplicate(row, deps: deps))
+    }
+
     /// Re-reads a shot whose file was just edited: hash, size and OCR text. Nil when the
     /// bytes are unchanged.
     public func refreshContent(shotID: Int64) async throws -> Shot? {

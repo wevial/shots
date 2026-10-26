@@ -75,6 +75,7 @@ struct ContentView: View {
             ToolbarItem(placement: .primaryAction) { inspectorToggle }
         }
         .onChange(of: window.searchFocusRequests) { focus = .search }
+        .onChange(of: focus) { _, focus in window.searchHasFocus = focus == .search }
         .quickLookPreview($model.quickLookURL)
         .sheet(item: $window.editingShot) { ImageEditorView(shot: $0) }
         .alert("Something went wrong", isPresented: $model.isShowingError, presenting: model.lastError) { _ in

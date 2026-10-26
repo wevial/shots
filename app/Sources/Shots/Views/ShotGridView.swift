@@ -48,10 +48,6 @@ struct ShotGridView: View {
                 }
                 .onKeyPress(.space) { run { model.quickLook($0) } }
                 .onKeyPress(.return) { run { model.open($0) } }
-                .onKeyPress(.delete, phases: .down) { press in
-                    guard press.modifiers == .command else { return .ignored }
-                    return run { shot in Task { await model.moveToTrash([shot]) } }
-                }
                 .onKeyPress(.escape) {
                     guard model.selectedShotID != nil else { return .ignored }
                     model.selectedShotID = nil
@@ -156,12 +152,8 @@ struct ShotGridView: View {
         Divider()
         if shot.isScratch {
             Button("Keep") { Task { await model.keep(shot) } }
+            Divider()
         }
-        Button("Move to Trash") { Task { await model.moveToTrash([shot]) } }
-            .keyboardShortcut(.delete)
-            .disabled(busy)
-
-        Divider()
         Button("Edit Image…") { window.editingShot = shot }
             .disabled(!shot.fileExists)
         Button("Quick Look") { model.quickLook(shot) }
@@ -169,6 +161,10 @@ struct ShotGridView: View {
         Divider()
         Button("Copy Image") { model.copyImage(shot) }
         Button("Copy Path") { model.copyPath(shot) }
+        Divider()
+        Button("Duplicate") { Task { await model.duplicate(shot) } }
+            .disabled(!shot.fileExists)
+        Button("Move to Trash") { Task { await model.moveToTrash(shot) } }
     }
 }
 

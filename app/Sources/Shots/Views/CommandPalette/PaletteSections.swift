@@ -13,6 +13,12 @@ extension PaletteSection {
             PaletteCommand(id: "quick-look", title: "Quick Look", systemImage: "eye", shortcut: "Space") { model.quickLook(shot) },
             PaletteCommand(id: "reveal", title: "Reveal in Finder", systemImage: "folder") { model.revealInFinder(shot) },
             PaletteCommand(id: "open", title: "Open", systemImage: "arrow.up.forward.app") { model.open(shot) },
+            PaletteCommand(id: "duplicate", title: "Duplicate", systemImage: "plus.square.on.square", shortcut: "⌘D") {
+                Task { await model.duplicate(shot) }
+            },
+            PaletteCommand(id: "trash", title: "Move to Trash", systemImage: "trash", shortcut: "⌘⌫") {
+                Task { await model.moveToTrash(shot) }
+            },
         ]
 
         if shot.isScratch {
@@ -20,9 +26,6 @@ extension PaletteSection {
                 Task { await model.keep(shot) }
             })
         }
-        commands.append(PaletteCommand(id: "trash", title: "Move to Trash", systemImage: "trash", shortcut: "⌘⌫") {
-            Task { await model.moveToTrash([shot]) }
-        })
 
         if shot.needsReview, let suggestion = shot.suggestedCategory {
             commands.append(PaletteCommand(
