@@ -2,11 +2,12 @@ import ShotsKit
 import SwiftUI
 
 /// The card in a "just captured" panel: the thumbnail, then "Copied" and "Filing…", then the
-/// title with a category menu and Open (or a failure line with Show).
+/// title with a category menu and Open (or a failure line with Show). Clicking anywhere else
+/// on the card opens it in Shots too.
 struct CapturePreviewView: View {
     @Environment(AppModel.self) private var model
     let preview: CapturePreview
-    /// Opens the shot in Shots, or the Failed list for a failure.
+    /// Opens the shot in Shots (once it's filed, while filing), or the Failed list for a failure.
     var onOpen: () -> Void = {}
     var onClose: () -> Void = {}
     var onRecategorize: @MainActor (String) -> Void = { _ in }
@@ -25,6 +26,9 @@ struct CapturePreviewView: View {
         }
         .padding(10)
         .frame(width: 330)
+        .contentShape(.rect(cornerRadius: 16))
+        .onTapGesture(perform: onOpen)
+        .clickable()
         .glassEffect(.regular, in: .rect(cornerRadius: 16))
         .overlay(alignment: .topLeading) {
             if preview.isHovered { closeButton }
@@ -32,17 +36,13 @@ struct CapturePreviewView: View {
     }
 
     private var thumbnail: some View {
-        ThumbnailView(url: preview.fileURL, maxSize: 96)
+        ThumbnailView(url: preview.fileURL, maxSize: 96, revision: preview.shot?.sha256 ?? "")
             .frame(width: 96, height: 64)
             .background(.quaternary.opacity(0.5))
             .clipShape(.rect(cornerRadius: 6))
             .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(.primary.opacity(0.1)))
             // `fileURL` follows the file as it's filed and re-filed, so the drag always works.
             .draggable(preview.fileURL)
-            .onTapGesture {
-                if preview.phase != .filing { onOpen() }
-            }
-            .clickable()
     }
 
     @ViewBuilder

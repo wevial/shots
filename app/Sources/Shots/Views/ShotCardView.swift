@@ -11,7 +11,7 @@ struct ShotCardView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            ThumbnailView(url: shot.fileURL, maxSize: 360)
+            ThumbnailView(url: shot.fileURL, maxSize: 360, revision: shot.sha256)
                 .frame(maxWidth: .infinity)
                 .frame(height: 120)
                 .background(.quaternary.opacity(0.5), in: .rect(cornerRadius: 6))

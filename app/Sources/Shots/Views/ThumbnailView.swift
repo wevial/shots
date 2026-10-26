@@ -7,6 +7,9 @@ struct ThumbnailView: View {
     let url: URL
     /// The longest side to render, in points.
     var maxSize: CGFloat = 240
+    /// Changes when the file's content does (a shot's `sha256`), so an edit made in place,
+    /// at the same path, loads again.
+    var revision = ""
 
     @Environment(\.displayScale) private var displayScale
     @State private var image: CGImage?
@@ -26,9 +29,9 @@ struct ThumbnailView: View {
                 Color.clear // Loading: keep the layout stable without flashing a placeholder.
             }
         }
-        // .task(id:) restarts when the URL changes (e.g. after a recat moves the file) and is
-        // cancelled automatically when the view scrolls away.
-        .task(id: url) {
+        // .task(id:) restarts when the URL changes (e.g. after a recat moves the file) or the
+        // file is edited, and is cancelled automatically when the view scrolls away.
+        .task(id: "\(revision)|\(url.path)") {
             didFinish = false
             let loaded = await Thumbnails.shared.image(
                 for: url, size: CGSize(width: maxSize, height: maxSize), scale: displayScale)

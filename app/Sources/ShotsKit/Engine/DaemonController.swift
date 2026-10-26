@@ -32,11 +32,16 @@ public final class DaemonController {
     @ObservationIgnored private let log: Logger
     @ObservationIgnored private var deps: Deps?
     @ObservationIgnored private var daemon: Daemon?
+    /// Runs whenever the index is open, paused or not: edits made elsewhere still show up.
+    @ObservationIgnored private var librarySync: LibrarySync?
     @ObservationIgnored private var activityTask: Task<Void, Never>?
     /// Outlives each `Daemon`, which `load()` replaces, so readers never have to resubscribe.
     @ObservationIgnored private let captures = Broadcast<CaptureEvent>()
 
     private static let pausedKey = "watchingPaused"
+    /// The last FSEvents event `LibrarySync` handled, so edits made while Shots was closed
+    /// are caught up at the next launch.
+    private static let libraryEventKey = "libraryLastEventID"
 
     public static let logPath = NSHomeDirectory() + "/Library/Logs/shots/shots.log"
 
@@ -61,6 +66,7 @@ public final class DaemonController {
     /// (Re)reads the config, opens the index and, unless watching is paused, starts watching.
     public func load() async {
         await stopWatching()
+        await stopLibrarySync()
         state = .starting
         Toolchain.augmentPath()
         do {
@@ -78,6 +84,7 @@ public final class DaemonController {
             state = .failed(errorMessage(error))
             return
         }
+        await startLibrarySync()
         if defaults.bool(forKey: Self.pausedKey) {
             state = .paused
         } else {
@@ -107,6 +114,7 @@ public final class DaemonController {
     /// Stops watching and waits for jobs in flight. Called when the app quits.
     public func shutdown() async {
         await stopWatching()
+        await stopLibrarySync()
         await deps?.database.close()
         deps = nil
     }
@@ -140,6 +148,31 @@ public final class DaemonController {
         guard let daemon else { return }
         self.daemon = nil
         await daemon.stop()
+    }
+
+    private func startLibrarySync() async {
+        guard let deps, librarySync == nil else { return }
+        // UserDefaults is thread-safe, just not marked Sendable.
+        nonisolated(unsafe) let defaults = defaults
+        let key = Self.libraryEventKey
+        let sync = LibrarySync(deps: deps) { id in
+            defaults.set(NSNumber(value: id), forKey: key)
+        }
+        // The first time, catch up on the last month: edits made before this version.
+        let since = (defaults.object(forKey: key) as? NSNumber)?.uint64Value
+            ?? LibrarySync.eventID(before: .now.addingTimeInterval(-30 * 86_400), onVolumeOf: deps.config.outputRoot)
+        do {
+            try await sync.start(since: since)
+            librarySync = sync
+        } catch {
+            log.error("library watcher error", ["error": .string(errorMessage(error))])
+        }
+    }
+
+    private func stopLibrarySync() async {
+        guard let librarySync else { return }
+        self.librarySync = nil
+        await librarySync.stop()
     }
 
     /// `daemon-status.json`, which `shots doctor` reads: TCC grants belong to this process.
@@ -200,6 +233,14 @@ public final class DaemonController {
     private func runningDeps() throws -> Deps {
         guard let deps else { throw ShotsError("The screenshot engine isn't running, so screenshots can't be changed.") }
         return deps
+    }
+
+    /// Re-reads a shot whose file was just edited: hash, size and OCR text. Nil when the
+    /// bytes are unchanged.
+    public func refreshContent(shotID: Int64) async throws -> Shot? {
+        guard let deps else { throw ShotsError("The screenshot engine isn't running, so screenshots can't be changed.") }
+        guard let row = try await deps.database.shot(id: shotID) else { throw ShotsError("That screenshot is no longer in the index.") }
+        return try await ShotsCore.refreshContent(row, deps: deps).map(Shot.init(row:))
     }
 }
 

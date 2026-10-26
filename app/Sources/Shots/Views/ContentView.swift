@@ -76,6 +76,7 @@ struct ContentView: View {
         }
         .onChange(of: window.searchFocusRequests) { focus = .search }
         .quickLookPreview($model.quickLookURL)
+        .sheet(item: $window.editingShot) { ImageEditorView(shot: $0) }
         .alert("Something went wrong", isPresented: $model.isShowingError, presenting: model.lastError) { _ in
             Button("OK") {}
         } message: { message in

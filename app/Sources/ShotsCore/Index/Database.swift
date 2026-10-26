@@ -160,6 +160,20 @@ public actor Database {
         ))
     }
 
+    /// New pixels in the same file (cropped or rotated, here or in another app): what was read
+    /// from the image changes, how it was filed doesn't.
+    public func updateShotContent(_ id: Int64, sha256: String, width: Int, height: Int, ocrText: String) throws -> ShotRow {
+        try one(shots(
+            "update shots set sha256 = ?, width = ?, height = ?, ocr_text = ? where id = ? returning *",
+            [.text(sha256), .int(Int64(width)), .int(Int64(height)), .text(ocrText), .int(id)]
+        ))
+    }
+
+    /// The shot filed at exactly `path`, if any.
+    public func shot(atPath path: String) throws -> ShotRow? {
+        try shots("select * from shots where path = ?", [.text(path)]).first
+    }
+
     /// Undoes an insert whose file move failed.
     public func deleteShot(_ id: Int64) throws {
         try db.run("delete from shots where id = ?", [.int(id)])

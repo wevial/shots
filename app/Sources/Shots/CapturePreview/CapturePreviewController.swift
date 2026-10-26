@@ -30,6 +30,8 @@ final class CapturePreviewController {
     /// Where the pointer was when the stack's first panel appeared; the rest join it there.
     private var screen: NSScreen?
     private var openMenus = 0
+    /// Jobs clicked while still filing: Shots shows them as soon as they're filed.
+    private var opensWhenFiled: Set<CapturePreview.ID> = []
     private var listener: Task<Void, Never>?
 
     init(model: AppModel) {
@@ -61,10 +63,12 @@ final class CapturePreviewController {
             guard Self.isEnabled else { return }
             show(CapturePreview(id: jobID, inboxPath: path, copied: copied))
         case .filed(let jobID, let row):
+            if opensWhenFiled.remove(jobID) != nil { model.show(Shot(row: row)) }
             guard let preview = preview(jobID) else { return }
             preview.phase = .filed(Shot(row: row))
             scheduleHide(preview)
         case .failed(let jobID, let error):
+            if opensWhenFiled.remove(jobID) != nil { model.show(.failed) }
             guard let preview = preview(jobID) else { return }
             preview.phase = .failed(error)
             scheduleHide(preview)
@@ -79,7 +83,9 @@ final class CapturePreviewController {
 
     private func open(_ preview: CapturePreview) {
         switch preview.phase {
-        case .filing: return
+        case .filing:
+            opensWhenFiled.insert(preview.id)
+            model.show(.all)
         case .filed(let shot): model.show(shot)
         case .failed: model.show(.failed)
         }

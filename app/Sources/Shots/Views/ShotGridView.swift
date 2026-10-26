@@ -5,6 +5,7 @@ import UniformTypeIdentifiers
 /// The content column: a grid of `ShotCardView`s for `model.shots`, bound to `model.selectedShotID`.
 struct ShotGridView: View {
     @Environment(AppModel.self) private var model
+    @Environment(MainWindowState.self) private var window
     var focus: FocusState<ContentView.Pane?>.Binding
 
     // Cards keep one size; resizing the window only changes how many fit in a row, and the
@@ -161,6 +162,8 @@ struct ShotGridView: View {
             .disabled(busy)
 
         Divider()
+        Button("Edit Image…") { window.editingShot = shot }
+            .disabled(!shot.fileExists)
         Button("Quick Look") { model.quickLook(shot) }
         Button("Reveal in Finder") { model.revealInFinder(shot) }
         Divider()
@@ -178,11 +181,13 @@ private struct GridPreviewHost: View {
 #Preview("Grid") {
     GridPreviewHost()
         .environment(AppModel.preview(selecting: Shot.samples[1]))
+        .environment(MainWindowState())
         .frame(width: 640, height: 480)
 }
 
 #Preview("Empty") {
     GridPreviewHost()
         .environment(AppModel.preview(scope: .category("nothing-here")))
+        .environment(MainWindowState())
         .frame(width: 400, height: 300)
 }

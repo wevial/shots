@@ -353,6 +353,26 @@ public final class AppModel {
         scratchCheckTask?.cancel()
     }
 
+    /// Crops, turns or flips the shot's file in place, then re-reads it (size, text) into the
+    /// index. False when it failed (see `lastError`).
+    @discardableResult
+    public func save(_ edit: ImageEdit, to shot: Shot) async -> Bool {
+        guard fileExists(shot.fileURL) else { return false }
+        let url = shot.fileURL
+        do {
+            try await Task.detached { try edit.apply(toFileAt: url) }.value
+        } catch {
+            lastError = error.localizedDescription
+            return false
+        }
+        // The library watcher would catch it too, a moment later.
+        if daemon.state != .idle, let refreshed = try? await daemon.refreshContent(shotID: shot.id) {
+            replace(refreshed)
+        }
+        await reload()
+        return true
+    }
+
     private func replace(_ updated: Shot) {
         // recat moved the file; keep an open Quick Look panel pointing at it.
         if let old = shots.first(where: { $0.id == updated.id }), quickLookURL == old.fileURL {

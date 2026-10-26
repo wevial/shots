@@ -10,6 +10,7 @@ struct CommandPalette: View {
     var openStatusWindow: () -> Void
 
     @Environment(AppModel.self) private var model
+    @Environment(MainWindowState.self) private var window
     @AppStorage(CapturePreviewController.enabledKey) private var showsCapturePreview = true
 
     @State private var query: String
@@ -169,7 +170,7 @@ struct CommandPalette: View {
     private var sections: [PaletteSection] {
         var commands: [PaletteSection] = []
         if let shot = model.selectedShot {
-            commands.append(.selection(shot, model: model))
+            commands.append(.selection(shot, model: model, window: window))
         }
         commands.append(.goTo(model: model))
         commands.append(.app(
@@ -224,6 +225,7 @@ struct CommandPalette: View {
 #Preview("Empty query") {
     CommandPalette(isPresented: .constant(true), showsInspector: .constant(true), openStatusWindow: {})
         .environment(AppModel.preview())
+        .environment(MainWindowState())
         .frame(width: 900, height: 600)
         .background { Backdrop() }
 }
@@ -231,6 +233,7 @@ struct CommandPalette: View {
 #Preview("Query") {
     CommandPalette(isPresented: .constant(true), showsInspector: .constant(true), openStatusWindow: {}, query: "re")
         .environment(AppModel.preview(selecting: .sample))
+        .environment(MainWindowState())
         .frame(width: 900, height: 600)
         .background { Backdrop() }
 }
@@ -238,6 +241,7 @@ struct CommandPalette: View {
 #Preview("Selection") {
     CommandPalette(isPresented: .constant(true), showsInspector: .constant(true), openStatusWindow: {})
         .environment(AppModel.preview(selecting: Shot.samples[2]))
+        .environment(MainWindowState())
         .frame(width: 900, height: 600)
         .background { Backdrop() }
 }

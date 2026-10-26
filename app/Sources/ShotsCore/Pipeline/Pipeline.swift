@@ -267,6 +267,25 @@ private func copyToClipboard(_ path: String, deps: Deps) async -> Bool {
     }
 }
 
+/// Catches the index up with a filed shot whose file was edited in place (cropped, rotated):
+/// new hash, size and OCR text. Title, category and tags stay; nothing is moved or renamed.
+/// Returns the updated row, or nil when the bytes haven't changed (or the file is gone).
+@discardableResult
+public func refreshContent(_ shot: ShotRow, deps: Deps) async throws -> ShotRow? {
+    guard FileManager.default.fileExists(atPath: shot.path) else { return nil }
+    // An editor may still be writing (Preview saves in several steps).
+    try await Files.waitForStable(shot.path, options: deps.stableOptions)
+    let sha = try Files.sha256(shot.path)
+    guard sha != shot.sha256 else { return nil }
+    let ocr = try await deps.native.ocr(shot.path, languages: deps.config.ocrLanguages)
+    let updated = try await deps.database.updateShotContent(
+        shot.id, sha256: sha, width: ocr.width, height: ocr.height, ocrText: ocr.text)
+    deps.log.info("refreshed edited file", [
+        "path": .string(shot.path), "width": JSONValue(ocr.width), "height": JSONValue(ocr.height),
+    ])
+    return updated
+}
+
 /// Re-classifies an indexed shot from its stored OCR and context (or files it under
 /// `options.category` by hand), then renames, moves and retags it. Throws when the file is
 /// gone, the category is unknown, or an explicit cloud backend is blocked by privacy rules.

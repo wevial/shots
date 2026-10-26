@@ -5,9 +5,10 @@ import SwiftUI
 @MainActor
 extension PaletteSection {
     /// Actions on the selected screenshot, under its title.
-    static func selection(_ shot: Shot, model: AppModel) -> PaletteSection {
+    static func selection(_ shot: Shot, model: AppModel, window: MainWindowState) -> PaletteSection {
         var commands = [
             PaletteCommand(id: "copy-image", title: "Copy Image", systemImage: "doc.on.doc", shortcut: "⌘C") { model.copyImage(shot) },
+            PaletteCommand(id: "edit", title: "Edit Image", systemImage: "crop", shortcut: "⌘E") { window.editingShot = shot },
             PaletteCommand(id: "copy-path", title: "Copy Path", systemImage: "link") { model.copyPath(shot) },
             PaletteCommand(id: "quick-look", title: "Quick Look", systemImage: "eye", shortcut: "Space") { model.quickLook(shot) },
             PaletteCommand(id: "reveal", title: "Reveal in Finder", systemImage: "folder") { model.revealInFinder(shot) },

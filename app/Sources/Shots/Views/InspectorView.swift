@@ -12,7 +12,7 @@ struct InspectorView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
-                ThumbnailView(url: shot.fileURL, maxSize: 480)
+                ThumbnailView(url: shot.fileURL, maxSize: 480, revision: shot.sha256)
                     .frame(maxWidth: .infinity)
                     .draggable(shot.fileURL)
 
@@ -154,9 +154,10 @@ struct InspectorView: View {
     }
 }
 
-/// Copy, Quick Look, Reveal, Open as four equal tiles. Copy flips to "Copied" for a moment.
+/// Copy, Edit, Quick Look, Reveal, Open as equal tiles. Copy flips to "Copied" for a moment.
 private struct ActionTiles: View {
     @Environment(AppModel.self) private var model
+    @Environment(MainWindowState.self) private var window
     let shot: Shot
     @State private var copied = false
 
@@ -171,6 +172,7 @@ private struct ActionTiles: View {
                     copied = false
                 }
             }
+            tile("Edit", "crop") { window.editingShot = shot }
             tile("Quick Look", "eye") { model.quickLook(shot) }
             tile("Reveal", "folder") { model.revealInFinder(shot) }
             tile("Open", "arrow.up.forward.app") { model.open(shot) }
@@ -188,7 +190,8 @@ private struct ActionTiles: View {
                 Text(title)
                     .font(.caption)
                     .lineLimit(1)
-                    .minimumScaleFactor(0.8)
+                    // Five tiles share a narrow inspector; "Quick Look" is the longest label.
+                    .minimumScaleFactor(0.65)
             }
             .frame(maxWidth: .infinity)
             .frame(height: 50)
@@ -214,12 +217,14 @@ private struct TileButtonStyle: ButtonStyle {
 #Preview("Classified") {
     InspectorView(shot: .sample)
         .environment(AppModel.preview(selecting: .sample))
+        .environment(MainWindowState())
         .frame(width: 320, height: 800)
 }
 
 #Preview("Needs review") {
     InspectorView(shot: Shot.samples[2])
         .environment(AppModel.preview(selecting: Shot.samples[2]))
+        .environment(MainWindowState())
         .frame(width: 320, height: 800)
 }
 
@@ -228,11 +233,13 @@ private struct TileButtonStyle: ButtonStyle {
     model.previewRecategorizing(.sample)
     return InspectorView(shot: .sample)
         .environment(model)
+        .environment(MainWindowState())
         .frame(width: 320, height: 800)
 }
 
 #Preview("File missing") {
     InspectorView(shot: .missingFileSample)
         .environment(AppModel.preview())
+        .environment(MainWindowState())
         .frame(width: 320, height: 800)
 }
