@@ -44,7 +44,10 @@ public struct RulesBackend: Backend {
             .compactMap { $0?.isEmpty == false ? $0 : nil }
             .map(normalizeTag)
             .filter { seen.insert($0).inserted }
-        return .success(ClassifyResult(category: category, tags: tags, title: Self.guessTitle(input), confidence: confidence))
+        return .success(ClassifyResult(
+            category: category, tags: tags, title: Self.guessTitle(input), confidence: confidence,
+            scratch: !input.scratchHints.isEmpty
+        ))
     }
 
     private static func guessTitle(_ input: ClassifyInput) -> String {

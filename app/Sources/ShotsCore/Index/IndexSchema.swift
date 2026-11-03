@@ -1,7 +1,15 @@
 /// The index schema, copied verbatim from the original TypeScript daemon (src/db.ts, now in
 /// git history) so indexes it created keep working. Everything is `if not exists`, so running
-/// it on an existing index changes nothing.
+/// it on an existing index changes nothing. Columns added since are in `columns`.
 enum Schema {
+    /// Added after the TypeScript daemon; `Database` adds whichever an index is missing.
+    ///   scratch: the classifier thinks it's a throwaway (null until judged)
+    ///   kept: you said keep it anyway, so it never shows up in Clean Up again
+    static let columns: [(table: String, name: String, definition: String)] = [
+        ("shots", "scratch", "integer"),
+        ("shots", "kept", "integer not null default 0"),
+    ]
+
     static let sql = """
     create table if not exists jobs (
       id integer primary key,

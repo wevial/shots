@@ -75,7 +75,7 @@ struct ValidateResultTests {
     let properties = try #require(schema["properties"]?.objectValue?.keys)
     #expect(required.sorted() == properties.sorted())
     #expect(schema["properties"]?["category"]?["enum"] == ["code", "misc"])
-    #expect(schema.serialized() == #"{"type":"object","additionalProperties":false,"required":["category","tags","title","confidence"],"properties":{"category":{"type":"string","enum":["code","misc"]},"tags":{"type":"array","items":{"type":"string"},"maxItems":8},"title":{"type":"string"},"confidence":{"type":"number","minimum":0,"maximum":1}}}"#)
+    #expect(schema.serialized() == #"{"type":"object","additionalProperties":false,"required":["category","tags","title","confidence","scratch"],"properties":{"category":{"type":"string","enum":["code","misc"]},"tags":{"type":"array","items":{"type":"string"},"maxItems":8},"title":{"type":"string"},"confidence":{"type":"number","minimum":0,"maximum":1},"scratch":{"type":"boolean"}}}"#)
 }
 
 @Test func normalizeTag() {

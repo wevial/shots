@@ -85,6 +85,10 @@ public struct ShotRow: Sendable, Equatable, Hashable, JSONRepresentable {
     public var review: Bool
     /// The chain's attempts as JSON (`[Attempt]`).
     public var attemptsJSON: String?
+    /// The classifier's scratch verdict; nil for shots filed before it gave one.
+    public var scratch: Bool?
+    /// You chose to keep it, so Clean Up never suggests it.
+    public var kept: Bool
 
     public var tags: [String] {
         (try? JSONDecoder().decode([String].self, from: Data(tagsJSON.utf8))) ?? []
@@ -117,6 +121,8 @@ public struct ShotRow: Sendable, Equatable, Hashable, JSONRepresentable {
         backend = row.string("backend") ?? ""
         review = (row.int("review") ?? 0) != 0
         attemptsJSON = row.string("attempts_json")
+        scratch = row.int("scratch").map { $0 != 0 }
+        kept = (row.int("kept") ?? 0) != 0
     }
 
     /// The raw row with the column names as keys, in column order: what `shots recat --json`
@@ -136,7 +142,7 @@ public struct ShotRow: Sendable, Equatable, Hashable, JSONRepresentable {
             "category": .string(category), "suggested_category": JSONValue(suggestedCategory),
             "tags_json": .string(tagsJSON), "tags_text": .string(tagsText), "title": .string(title),
             "confidence": .number(confidence), "backend": .string(backend), "review": review ? 1 : 0,
-            "attempts_json": JSONValue(attemptsJSON),
+            "attempts_json": JSONValue(attemptsJSON), "scratch": JSONValue(scratch.map { $0 ? 1 : 0 }), "kept": kept ? 1 : 0,
         ]
     }
 }
@@ -165,13 +171,15 @@ public struct NewShot: Sendable, Equatable {
     public var backend: String
     public var review: Bool
     public var attemptsJSON: String?
+    public var scratch: Bool?
 
     public init(
         path: String, originalName: String, sha256: String, capturedAt: String, processedAt: String,
         appBundleId: String? = nil, appName: String? = nil, windowTitle: String? = nil, url: String? = nil,
         urlTitle: String? = nil, captureType: String? = nil, width: Int? = nil, height: Int? = nil,
         ocrText: String = "", category: String, suggestedCategory: String? = nil, tags: [String] = [],
-        title: String, confidence: Double, backend: String, review: Bool = false, attemptsJSON: String? = nil
+        title: String, confidence: Double, backend: String, review: Bool = false, attemptsJSON: String? = nil,
+        scratch: Bool? = nil
     ) {
         self.path = path
         self.originalName = originalName
@@ -195,6 +203,7 @@ public struct NewShot: Sendable, Equatable {
         self.backend = backend
         self.review = review
         self.attemptsJSON = attemptsJSON
+        self.scratch = scratch
     }
 }
 
@@ -210,10 +219,12 @@ public struct ShotUpdate: Sendable, Equatable {
     public var review: Bool
     public var attemptsJSON: String?
     public var processedAt: String
+    public var scratch: Bool?
 
     public init(
         path: String, category: String, suggestedCategory: String?, tags: [String], title: String,
-        confidence: Double, backend: String, review: Bool, attemptsJSON: String?, processedAt: String = Timestamp.now()
+        confidence: Double, backend: String, review: Bool, attemptsJSON: String?, processedAt: String = Timestamp.now(),
+        scratch: Bool? = nil
     ) {
         self.path = path
         self.category = category
@@ -225,6 +236,7 @@ public struct ShotUpdate: Sendable, Equatable {
         self.review = review
         self.attemptsJSON = attemptsJSON
         self.processedAt = processedAt
+        self.scratch = scratch
     }
 }
 

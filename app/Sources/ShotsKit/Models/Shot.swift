@@ -31,6 +31,8 @@ public struct Shot: Identifiable, Hashable, Sendable {
     /// Raw backend name (`apple`, `claude-code`, `codex`, `rules`, `manual`).
     public var backend: String
     public var needsReview: Bool
+    /// The classifier thinks it's a throwaway and you haven't chosen to keep it.
+    public var isScratch: Bool
 
     public init(
         id: Int64,
@@ -54,7 +56,8 @@ public struct Shot: Identifiable, Hashable, Sendable {
         title: String,
         confidence: Double,
         backend: String,
-        needsReview: Bool = false
+        needsReview: Bool = false,
+        isScratch: Bool = false
     ) {
         self.id = id
         self.path = path
@@ -78,6 +81,7 @@ public struct Shot: Identifiable, Hashable, Sendable {
         self.confidence = confidence
         self.backend = backend
         self.needsReview = needsReview
+        self.isScratch = isScratch
     }
 }
 
@@ -105,7 +109,7 @@ extension Shot {
 
 extension Shot: Decodable {
     private enum CodingKeys: String, CodingKey {
-        case id, path, sha256, width, height, category, title, confidence, backend, review, url
+        case id, path, sha256, width, height, category, title, confidence, backend, review, url, scratch, kept
         case originalName = "original_name"
         case capturedAt = "captured_at"
         case processedAt = "processed_at"
@@ -151,7 +155,9 @@ extension Shot: Decodable {
             title: try c.decode(String.self, forKey: .title),
             confidence: try c.decode(Double.self, forKey: .confidence),
             backend: try c.decode(String.self, forKey: .backend),
-            needsReview: (try c.decodeIfPresent(Int.self, forKey: .review) ?? 0) != 0
+            needsReview: (try c.decodeIfPresent(Int.self, forKey: .review) ?? 0) != 0,
+            isScratch: try (c.decodeIfPresent(Int.self, forKey: .scratch) ?? 0) != 0
+                && (c.decodeIfPresent(Int.self, forKey: .kept) ?? 0) == 0
         )
     }
 
@@ -194,7 +200,8 @@ extension Shot {
             title: row.title,
             confidence: row.confidence,
             backend: row.backend,
-            needsReview: row.review
+            needsReview: row.review,
+            isScratch: row.scratch == true && !row.kept
         )
     }
 }

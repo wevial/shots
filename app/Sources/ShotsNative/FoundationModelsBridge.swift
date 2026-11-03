@@ -12,6 +12,8 @@ struct ShotClassification {
     var title: String
     @Guide(description: "0.9+ only if the content unmistakably fits one category; 0.5-0.7 if two categories could fit; below 0.5 if guessing", .range(0...1))
     var confidence: Double
+    @Guide(description: "True if this was most likely taken to show someone something to fix or check right now (a UI bug, an app being built, an error) and is worthless afterwards; false if it is worth keeping")
+    var scratch: Bool
 }
 
 func osVersionString() -> String {
@@ -96,7 +98,9 @@ func classifyWithFoundationModels(instructions: String, prompt: String, imagePat
         do {
             let (result, mode) = try await generate(instructions: instructions, prompt: prompt, imagePath: imagePath)
             return .ok(
-                ClassifyResult(category: result.category, tags: result.tags, title: result.title, confidence: result.confidence),
+                ClassifyResult(
+                    category: result.category, tags: result.tags, title: result.title, confidence: result.confidence,
+                    scratch: result.scratch),
                 mode: mode)
         } catch is CancellationError {
             return .timedOut

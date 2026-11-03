@@ -28,6 +28,10 @@ struct InspectorView: View {
                     suggestionCallout(suggestion)
                 }
 
+                if shot.isScratch {
+                    scratchCallout
+                }
+
                 if !shot.tags.isEmpty {
                     TagChipsView(tags: shot.tags)
                 }
@@ -98,6 +102,21 @@ struct InspectorView: View {
         }
         .padding(10)
         .background(.orange.opacity(0.15), in: .rect(cornerRadius: 8))
+    }
+
+    /// The classifier thinks this was a throwaway: keep it, or send it to the Trash.
+    private var scratchCallout: some View {
+        HStack {
+            Label("Looks like scratch", systemImage: "sparkles")
+            Spacer()
+            Button("Keep") { Task { await model.keep(shot) } }
+                .clickable()
+            Button("Trash", role: .destructive) { Task { await model.moveToTrash([shot]) } }
+                .clickable()
+        }
+        .disabled(isBusy)
+        .padding(10)
+        .background(.purple.opacity(0.15), in: .rect(cornerRadius: 8))
     }
 
     private var ocrSection: some View {

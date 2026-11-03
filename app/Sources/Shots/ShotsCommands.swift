@@ -41,10 +41,10 @@ struct ShotsCommands: Commands {
         }
     }
 
-    /// The sidebar's rows, top to bottom: All, Needs Review, Failed, then the categories that
+    /// The sidebar's rows, top to bottom: All, Needs Review, Failed, Clean Up, then the categories that
     /// hold screenshots (the ones folded under More aren't numbered).
     private var scopes: [SidebarScope] {
         let filled = model.categories.filter { model.counts.count(for: .category($0)) > 0 }
-        return [.all, .review, .failed] + filled.map { .category($0) }
+        return [.all, .review, .failed, .cleanup] + filled.map { .category($0) }
     }
 }

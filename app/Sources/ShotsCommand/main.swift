@@ -11,6 +11,10 @@ let usage = """
       shots recat <file> [--backend <\(BackendName.allCases.map(\.rawValue).joined(separator: "|"))>] [--category <name>] [--json]
                                         re-classify and re-file an indexed screenshot
       shots review [--failed]           list low-confidence / unknown-category shots (or failed jobs)
+      shots cleanup [--scan] [--trash] [--json]
+                                        list scratch shots worth deleting; --scan judges older shots
+                                        first, --trash moves the list to the Trash
+      shots cleanup --keep <file>       never suggest this one again
       shots doctor                      check OS, models, CLIs, auth, permissions, config
       shots config [--json]             print the effective config and its path
 
@@ -29,6 +33,7 @@ func main(_ argv: [String]) async throws -> Int32 {
     case "search": return try await Commands.search(rest, config: config)
     case "recat": return try await Commands.recat(rest, config: config)
     case "review": return try await Commands.review(rest, config: config)
+    case "cleanup": return try await Commands.cleanup(rest, config: config)
     case "doctor": return try await Commands.doctor(config: config)
     case "config": return Commands.config(rest, config: config)
     default: throw UsageError("unknown command \"\(command)\"")

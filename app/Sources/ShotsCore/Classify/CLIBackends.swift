@@ -56,7 +56,7 @@ public func askWithRetry(prompt: String, _ ask: (_ prompt: String) async -> RawR
             [prompt, "", "Your previous reply was rejected:"]
             + errors.map { "- \($0)" }
             + ["Previous reply:", String(text.prefix(2000)), "",
-               #"Reply again with ONLY a JSON object: {"category": string, "tags": string[], "title": string, "confidence": number}."#]
+               #"Reply again with ONLY a JSON object: {"category": string, "tags": string[], "title": string, "confidence": number, "scratch": boolean}."#]
         ).joined(separator: "\n")
     }
     return .failure(.error, message: "unreachable")

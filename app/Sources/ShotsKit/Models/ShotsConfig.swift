@@ -10,6 +10,8 @@ public struct ShotsConfig: Sendable, Equatable {
     public var categoryHints: [String: String]
     public var outputRoot: String
     public var inbox: String
+    /// Scratch shots show up in Clean Up once they're this old.
+    public var cleanupAfterHours: Int
 
     public init(
         configPath: String,
@@ -17,7 +19,8 @@ public struct ShotsConfig: Sendable, Equatable {
         categories: [String],
         categoryHints: [String: String] = [:],
         outputRoot: String,
-        inbox: String
+        inbox: String,
+        cleanupAfterHours: Int = 24
     ) {
         self.configPath = configPath
         self.dbPath = dbPath
@@ -25,6 +28,7 @@ public struct ShotsConfig: Sendable, Equatable {
         self.categoryHints = categoryHints
         self.outputRoot = outputRoot
         self.inbox = inbox
+        self.cleanupAfterHours = cleanupAfterHours
     }
 
     /// What the daemon uses when no config file overrides it.
@@ -43,16 +47,20 @@ public struct ShotsConfig: Sendable, Equatable {
             categories: config.categories,
             categoryHints: config.categoryHints,
             outputRoot: config.outputRoot,
-            inbox: config.inbox
+            inbox: config.inbox,
+            cleanupAfterHours: config.cleanupAfterHours
         )
     }
 
     public var inboxURL: URL { URL(filePath: inbox) }
+
+    /// Scratch shots captured before this show up in Clean Up.
+    public func cleanupCutoff(now: Date = .now) -> Date { now.addingTimeInterval(-Double(cleanupAfterHours) * 3600) }
 }
 
 extension ShotsConfig: Decodable {
     private enum CodingKeys: String, CodingKey { case path, dbPath, config }
-    private enum ConfigKeys: String, CodingKey { case categories, categoryHints, outputRoot, inbox }
+    private enum ConfigKeys: String, CodingKey { case categories, categoryHints, outputRoot, inbox, cleanupAfterHours }
 
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -63,7 +71,8 @@ extension ShotsConfig: Decodable {
             categories: try config.decode([String].self, forKey: .categories),
             categoryHints: try config.decodeIfPresent([String: String].self, forKey: .categoryHints) ?? [:],
             outputRoot: try config.decode(String.self, forKey: .outputRoot),
-            inbox: try config.decode(String.self, forKey: .inbox)
+            inbox: try config.decode(String.self, forKey: .inbox),
+            cleanupAfterHours: try config.decodeIfPresent(Int.self, forKey: .cleanupAfterHours) ?? 24
         )
     }
 }

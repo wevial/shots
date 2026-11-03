@@ -105,7 +105,7 @@ struct ChainTests {
             object["attempts"] = .array(attempts)
             json = .object(object)
         }
-        #expect(json.serialized() == #"{"final":{"category":"code","tags":["code"],"title":"code shot","confidence":0.9},"backend":"apple","review":false,"suggestedCategory":null,"attempts":[{"backend":"apple","ms":0,"outcome":{"ok":true,"result":{"category":"code","tags":["code"],"title":"code shot","confidence":0.9}}}]}"#)
+        #expect(json.serialized() == #"{"final":{"category":"code","tags":["code"],"title":"code shot","confidence":0.9,"scratch":false},"backend":"apple","review":false,"suggestedCategory":null,"attempts":[{"backend":"apple","ms":0,"outcome":{"ok":true,"result":{"category":"code","tags":["code"],"title":"code shot","confidence":0.9,"scratch":false}}}]}"#)
     }
 }
 

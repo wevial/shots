@@ -91,6 +91,7 @@ extension Config {
         try check((0...1).contains(reviewBelowConfidence), "reviewBelowConfidence must be 0-1")
         try check((1...2).contains(concurrency), "concurrency must be 1 or 2")
         try check(timeoutMs > 0, "timeoutMs must be positive")
+        try check(cleanupAfterHours >= 0, "cleanupAfterHours must not be negative")
         try check(Paths.resolve(inbox) != Paths.resolve(outputRoot), "inbox and outputRoot must differ")
     }
 

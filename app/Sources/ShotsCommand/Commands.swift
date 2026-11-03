@@ -129,6 +129,62 @@ enum Commands {
         return 0
     }
 
+    /// `shots cleanup [--scan] [--trash] [--json]` and `shots cleanup --keep <file>`.
+    /// Lists scratch shots older than `cleanupAfterHours`. `--scan` first runs the classifier
+    /// chain on shots filed before it judged scratch (one chain run each).
+    static func cleanup(_ args: [String], config: Config) async throws -> Int32 {
+        let parsed = try Arguments(args, options: ["keep"], booleans: ["scan", "trash", "json"])
+        let deps = try makeDeps(config)
+        let database = deps.database
+        defer { Task { await database.close() } }
+
+        if let ref = parsed["keep"] {
+            guard let shot = try await database.findShot(ref, resolvedPath: Paths.resolve(ref)) else {
+                throw UsageError("not in the index: \(ref)")
+            }
+            try await database.keep(shot.id)
+            print("kept \(short(shot.path))")
+            return 0
+        }
+
+        if parsed.has("scan") {
+            let unjudged = try await database.unjudgedShots()
+            for (index, shot) in unjudged.enumerated() {
+                let verdict: String
+                do {
+                    verdict = try await judgeScratch(shot, deps: deps) ? "scratch" : "keep"
+                } catch {
+                    verdict = "error: \(errorMessage(error))"
+                }
+                writeError("[\(index + 1)/\(unjudged.count)] \(verdict)  \(short(shot.path))\n")
+            }
+        }
+
+        let rows = try await database.cleanupSuggestions(capturedBefore: config.cleanupCutoff())
+        if parsed.has("trash") {
+            for row in rows {
+                try await trashShot(row, database: database)
+                print("trashed \(short(row.path))")
+            }
+            if rows.isEmpty { print("nothing to clean up") }
+        } else if parsed.has("json") {
+            print(JSONValue.array(rows.map { row in
+                var object = row.jsonObject
+                object["ocr_text"] = nil
+                return .object(object)
+            }).serialized(indent: 2))
+        } else if rows.isEmpty {
+            print("nothing to clean up")
+        } else {
+            for row in rows {
+                print("\(row.capturedAt.prefix(16).replacingOccurrences(of: "T", with: " "))  [\(row.category)]  \(row.title)")
+                print("    \(short(row.path))")
+            }
+            print("\nmove them to the Trash with: shots cleanup --trash   keep one with: shots cleanup --keep <file>")
+        }
+        return 0
+    }
+
     /// `shots doctor`: exit 1 when any check fails.
     static func doctor(config: Config) async throws -> Int32 {
         let report = await Doctor.run(config: config, native: SystemNative(), loginItem: loginItemStatus())

@@ -1,7 +1,7 @@
 import ShotsKit
 import SwiftUI
 
-/// Scopes: All, Needs Review, Failed, then one row per category, each with a count.
+/// Scopes: All, Needs Review, Failed, Clean Up, then one row per category, each with a count.
 /// Categories with nothing in them fold under "More". Selecting a row sets `model.scope`.
 struct SidebarView: View {
     @Environment(AppModel.self) private var model
@@ -20,6 +20,7 @@ struct SidebarView: View {
                 row(.all)
                 row(.review)
                 row(.failed)
+                row(.cleanup)
             }
             Section("Categories") {
                 ForEach(filledCategories, id: \.self) { row(.category($0)) }
@@ -67,6 +68,7 @@ struct SidebarView: View {
         case .category(let name): Theme.color(for: name)
         case .review: .orange
         case .failed: .red
+        case .cleanup: .purple
         default: .accentColor
         }
     }

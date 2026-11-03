@@ -12,6 +12,8 @@ public typealias SQLiteError = ShotsCore.SQLiteError
 public actor ShotStore {
     private let db: SQLiteConnection
     public nonisolated let path: String
+    /// Whether the index has the scratch columns yet (the app's own `Database` adds them).
+    private var hasScratchColumns = false
 
     public init(path: String) throws {
         guard FileManager.default.fileExists(atPath: path) else {
@@ -22,7 +24,10 @@ public actor ShotStore {
     }
 
     /// Shots in `scope`, newest first, or ranked by relevance when `search` has words in it.
-    public func shots(in scope: SidebarScope, matching search: String = "", limit: Int = 5000) throws -> [Shot] {
+    /// Clean Up holds scratch shots captured before `cleanupCutoff`.
+    public func shots(
+        in scope: SidebarScope, matching search: String = "", limit: Int = 5000, cleanupCutoff: Date = .now
+    ) throws -> [Shot] {
         var conditions: [String] = []
         var bindings: [SQLiteConnection.Binding] = []
 
@@ -33,6 +38,10 @@ public actor ShotStore {
             conditions.append("s.category = ?")
             bindings.append(.text(name))
         case .failed: return [] // Failed items are jobs, not shots; see `failedJobs()`.
+        case .cleanup:
+            guard try scratchColumnsExist() else { return [] }
+            conditions.append(Self.cleanupCondition)
+            bindings.append(.text(Timestamp.string(from: cleanupCutoff)))
         }
 
         var sql = "select s.* from shots s"
@@ -65,7 +74,7 @@ public actor ShotStore {
         try db.query("select * from jobs where status = 'failed' order by updated_at desc", row: Self.failedJob)
     }
 
-    public func counts() throws -> ScopeCounts {
+    public func counts(cleanupCutoff: Date = .now) throws -> ScopeCounts {
         let totals = try db.query("select count(*) as n, coalesce(sum(review), 0) as review from shots") {
             (all: Int($0.int("n") ?? 0), review: Int($0.int("review") ?? 0))
         }.first ?? (all: 0, review: 0)
@@ -73,12 +82,34 @@ public actor ShotStore {
         let byCategory = try db.query("select category, count(*) as n from shots group by category") {
             ($0.string("category") ?? "", Int($0.int("n") ?? 0))
         }
+        var cleanup = 0, unjudged = 0
+        if try scratchColumnsExist() {
+            cleanup = try db.query("select count(*) as n from shots s where \(Self.cleanupCondition)", [.text(Timestamp.string(from: cleanupCutoff))]) {
+                Int($0.int("n") ?? 0)
+            }.first ?? 0
+            unjudged = try db.query("select count(*) as n from shots where scratch is null and kept = 0") { Int($0.int("n") ?? 0) }.first ?? 0
+        }
         return ScopeCounts(
             all: totals.all,
             review: totals.review,
             failed: failed,
+            cleanup: cleanup,
+            unjudged: unjudged,
             byCategory: Dictionary(byCategory, uniquingKeysWith: +)
         )
+    }
+
+    /// Binds one value: the cutoff.
+    private static let cleanupCondition = "s.scratch = 1 and s.kept = 0 and s.captured_at < ?"
+
+    /// Rechecked until they appear: a store can open an index the app hasn't migrated yet.
+    private func scratchColumnsExist() throws -> Bool {
+        if !hasScratchColumns {
+            hasScratchColumns = try db.query("select count(*) as n from pragma_table_info('shots') where name = 'scratch'") {
+                ($0.int("n") ?? 0) > 0
+            }.first ?? false
+        }
+        return hasScratchColumns
     }
 
     /// Changes whenever another connection (the daemon or the CLI) commits to the database.

@@ -28,6 +28,12 @@ public actor Database {
         try db.execute("pragma busy_timeout = 5000")
         try db.execute("pragma foreign_keys = on")
         try db.execute(Schema.sql)
+        for column in Schema.columns {
+            let existing = try db.query("select name from pragma_table_info(?)", [.text(column.table)]) { $0.string("name") }
+            if !existing.contains(column.name) {
+                try db.execute("alter table \(column.table) add column \(column.name) \(column.definition)")
+            }
+        }
         self.db = db
         self.path = path
     }
@@ -124,8 +130,8 @@ public actor Database {
             """
             insert into shots (path, original_name, sha256, captured_at, processed_at, app_bundle_id, app_name,
               window_title, url, url_title, capture_type, width, height, ocr_text, category, suggested_category,
-              tags_json, tags_text, title, confidence, backend, review, attempts_json)
-            values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) returning *
+              tags_json, tags_text, title, confidence, backend, review, attempts_json, scratch)
+            values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) returning *
             """,
             [
                 .text(s.path), .text(s.originalName), .text(s.sha256), .text(s.capturedAt), .text(s.processedAt),
@@ -133,7 +139,7 @@ public actor Database {
                 .nullable(s.urlTitle), .nullable(s.captureType), .nullable(s.width), .nullable(s.height),
                 .text(s.ocrText), .text(s.category), .nullable(s.suggestedCategory), .text(tagsJSON(s.tags)),
                 .text(s.tags.joined(separator: " ")), .text(s.title), .double(s.confidence), .text(s.backend),
-                .int(s.review ? 1 : 0), .nullable(s.attemptsJSON),
+                .int(s.review ? 1 : 0), .nullable(s.attemptsJSON), .nullable(s.scratch.map { $0 ? 1 : 0 }),
             ]
         ))
     }
@@ -142,13 +148,14 @@ public actor Database {
         try one(shots(
             """
             update shots set path = ?, category = ?, suggested_category = ?, tags_json = ?, tags_text = ?, title = ?,
-              confidence = ?, backend = ?, review = ?, attempts_json = ?, processed_at = ?
+              confidence = ?, backend = ?, review = ?, attempts_json = ?, processed_at = ?, scratch = ?
             where id = ? returning *
             """,
             [
                 .text(u.path), .text(u.category), .nullable(u.suggestedCategory), .text(tagsJSON(u.tags)),
                 .text(u.tags.joined(separator: " ")), .text(u.title), .double(u.confidence), .text(u.backend),
-                .int(u.review ? 1 : 0), .nullable(u.attemptsJSON), .text(u.processedAt), .int(id),
+                .int(u.review ? 1 : 0), .nullable(u.attemptsJSON), .text(u.processedAt),
+                .nullable(u.scratch.map { $0 ? 1 : 0 }), .int(id),
             ]
         ))
     }
@@ -156,6 +163,37 @@ public actor Database {
     /// Undoes an insert whose file move failed.
     public func deleteShot(_ id: Int64) throws {
         try db.run("delete from shots where id = ?", [.int(id)])
+    }
+
+    /// Drops a filed shot from the index (its file went to the Trash). Its job stays as a
+    /// record, unlinked.
+    public func removeShot(_ id: Int64) throws {
+        try db.run("update jobs set shot_id = null where shot_id = ?", [.int(id)])
+        try db.run("delete from shots where id = ?", [.int(id)])
+    }
+
+    // MARK: Clean Up
+
+    public func setScratch(_ id: Int64, _ scratch: Bool) throws {
+        try db.run("update shots set scratch = ? where id = ?", [.int(scratch ? 1 : 0), .int(id)])
+    }
+
+    /// Keeps a shot out of Clean Up for good, whatever the classifier says later.
+    public func keep(_ id: Int64) throws {
+        try db.run("update shots set kept = 1 where id = ?", [.int(id)])
+    }
+
+    /// Scratch shots captured before `cutoff` that nobody chose to keep, newest first.
+    public func cleanupSuggestions(capturedBefore cutoff: Date) throws -> [ShotRow] {
+        try shots(
+            "select * from shots where scratch = 1 and kept = 0 and captured_at < ? order by captured_at desc",
+            [.text(Timestamp.string(from: cutoff))]
+        )
+    }
+
+    /// Shots filed before the classifier judged scratch, newest first.
+    public func unjudgedShots() throws -> [ShotRow] {
+        try shots("select * from shots where scratch is null and kept = 0 order by captured_at desc")
     }
 
     /// Lookup for `recat`: the exact path first, then the original or current file name.

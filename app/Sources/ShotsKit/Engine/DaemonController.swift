@@ -170,6 +170,37 @@ public final class DaemonController {
         }
         return RecatResult(try await ShotsCore.recat(row, options: options, deps: deps))
     }
+
+    /// Moves the shots' files to the Trash and drops them from the index.
+    public func trash(shotIDs: [Int64]) async throws {
+        let deps = try runningDeps()
+        for id in shotIDs {
+            guard let row = try await deps.database.shot(id: id) else { continue }
+            try await trashShot(row, database: deps.database)
+        }
+    }
+
+    /// Keeps a shot out of Clean Up for good.
+    public func keep(shotID: Int64) async throws {
+        try await runningDeps().database.keep(shotID)
+    }
+
+    /// Runs the classifier chain on a shot filed before it judged scratch, storing only the verdict.
+    public func judgeScratch(shotID: Int64) async throws {
+        let deps = try runningDeps()
+        guard let row = try await deps.database.shot(id: shotID) else { return }
+        _ = try await ShotsCore.judgeScratch(row, deps: deps)
+    }
+
+    /// Shots filed before the classifier judged scratch, newest first.
+    public func unjudgedShotIDs() async throws -> [Int64] {
+        try await runningDeps().database.unjudgedShots().map(\.id)
+    }
+
+    private func runningDeps() throws -> Deps {
+        guard let deps else { throw ShotsError("The screenshot engine isn't running, so screenshots can't be changed.") }
+        return deps
+    }
 }
 
 /// The search path for tools the classifiers shell out to (`claude`, `codex`).

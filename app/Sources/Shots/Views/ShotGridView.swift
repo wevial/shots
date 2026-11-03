@@ -47,6 +47,10 @@ struct ShotGridView: View {
                 }
                 .onKeyPress(.space) { run { model.quickLook($0) } }
                 .onKeyPress(.return) { run { model.open($0) } }
+                .onKeyPress(.delete, phases: .down) { press in
+                    guard press.modifiers == .command else { return .ignored }
+                    return run { shot in Task { await model.moveToTrash([shot]) } }
+                }
                 .onKeyPress(.escape) {
                     guard model.selectedShotID != nil else { return .ignored }
                     model.selectedShotID = nil
@@ -117,6 +121,12 @@ struct ShotGridView: View {
     private var emptyState: some View {
         if !model.searchText.isEmpty {
             ContentUnavailableView.search(text: model.searchText)
+        } else if model.scope == .cleanup {
+            ContentUnavailableView {
+                Label("Nothing to Clean Up", systemImage: "sparkles")
+            } actions: {
+                CheckOlderShotsButton()
+            }
         } else {
             ContentUnavailableView(
                 "No Screenshots", systemImage: "photo.on.rectangle",
@@ -141,6 +151,14 @@ struct ShotGridView: View {
             }
         }
         .disabled(busy)
+
+        Divider()
+        if shot.isScratch {
+            Button("Keep") { Task { await model.keep(shot) } }
+        }
+        Button("Move to Trash") { Task { await model.moveToTrash([shot]) } }
+            .keyboardShortcut(.delete)
+            .disabled(busy)
 
         Divider()
         Button("Quick Look") { model.quickLook(shot) }

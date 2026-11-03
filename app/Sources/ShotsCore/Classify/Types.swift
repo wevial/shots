@@ -18,10 +18,12 @@ public struct ClassifyInput: Sendable, Equatable {
     public var dimensions: Dimensions?
     public var categories: [String]
     public var categoryHints: [String: String]
+    /// What the capture context says about it being scratch (see `scratchHints(_:scratchApps:)`).
+    public var scratchHints: [String]
 
     public init(
         imagePath: String, ocrText: String, appContext: AppContext?, captureType: String?,
-        dimensions: Dimensions?, categories: [String], categoryHints: [String: String] = [:]
+        dimensions: Dimensions?, categories: [String], categoryHints: [String: String] = [:], scratchHints: [String] = []
     ) {
         self.imagePath = imagePath
         self.ocrText = ocrText
@@ -30,6 +32,7 @@ public struct ClassifyInput: Sendable, Equatable {
         self.dimensions = dimensions
         self.categories = categories
         self.categoryHints = categoryHints
+        self.scratchHints = scratchHints
     }
 }
 
@@ -41,16 +44,23 @@ public struct ClassifyResult: Sendable, Equatable, Hashable, Codable, JSONRepres
     public var tags: [String]
     public var title: String
     public var confidence: Double
+    /// Taken to show something to fix right now (often to a coding agent) and not worth
+    /// keeping afterwards. Drives the Clean Up suggestions.
+    public var scratch: Bool
 
-    public init(category: String, tags: [String], title: String, confidence: Double) {
+    public init(category: String, tags: [String], title: String, confidence: Double, scratch: Bool = false) {
         self.category = category
         self.tags = tags
         self.title = title
         self.confidence = confidence
+        self.scratch = scratch
     }
 
     public var json: JSONValue {
-        ["category": .string(category), "tags": JSONValue(tags), "title": .string(title), "confidence": .number(confidence)]
+        [
+            "category": .string(category), "tags": JSONValue(tags), "title": .string(title),
+            "confidence": .number(confidence), "scratch": .bool(scratch),
+        ]
     }
 }
 

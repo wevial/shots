@@ -27,7 +27,7 @@ extension Shot {
                 captureType: "window", width: 1200, height: 760,
                 ocrText: "TypeError: Cannot read properties of undefined (reading 'total')\n    at checkout.ts:42:17",
                 category: "errors", tags: ["typeerror", "stack-trace", "bun"],
-                title: "TypeError in checkout", confidence: 0.93, backend: "apple"
+                title: "TypeError in checkout", confidence: 0.93, backend: "apple", isScratch: true
             ),
             Shot(
                 id: 3, path: SampleImages.path("2026-10-20_0940_untitled.png", color: .systemOrange),
@@ -93,6 +93,7 @@ extension AppModel {
             case .all: true
             case .review: shot.needsReview
             case .failed: false
+            case .cleanup: shot.isScratch
             case .category(let name): shot.category == name
             }
         }
@@ -102,6 +103,7 @@ extension AppModel {
             all: Shot.samples.count,
             review: Shot.samples.filter(\.needsReview).count,
             failed: FailedJob.samples.count,
+            cleanup: Shot.samples.filter(\.isScratch).count,
             byCategory: Dictionary(Shot.samples.map { ($0.category, 1) }, uniquingKeysWith: +)
         )
         model.isLoading = false

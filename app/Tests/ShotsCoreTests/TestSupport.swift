@@ -62,8 +62,10 @@ func appContext(
     AppContext(bundleId: bundleId, appName: appName, windowTitle: windowTitle, url: url, urlTitle: urlTitle, accessibility: true)
 }
 
-func ok(_ category: String, _ confidence: Double, title: String? = nil, tags: [String]? = nil) -> ClassifyOutcome {
-    .success(ClassifyResult(category: category, tags: tags ?? [category], title: title ?? "\(category) shot", confidence: confidence))
+func ok(_ category: String, _ confidence: Double, title: String? = nil, tags: [String]? = nil, scratch: Bool = false) -> ClassifyOutcome {
+    .success(ClassifyResult(
+        category: category, tags: tags ?? [category], title: title ?? "\(category) shot", confidence: confidence, scratch: scratch
+    ))
 }
 
 func fail(_ kind: FailureKind, _ message: String? = nil) -> ClassifyOutcome {

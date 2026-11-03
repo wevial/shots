@@ -66,6 +66,12 @@ struct ContentView: View {
         // Back to the grid after the palette closes, so arrow keys work straight away.
         .onChange(of: window.showsPalette) { _, open in if !open { focus = .grid } }
         .toolbar {
+            if model.scope == .cleanup && !model.shots.isEmpty {
+                ToolbarItemGroup(placement: .primaryAction) {
+                    CheckOlderShotsButton()
+                    TrashAllButton()
+                }
+            }
             ToolbarItem(placement: .primaryAction) { inspectorToggle }
         }
         .onChange(of: window.searchFocusRequests) { focus = .search }
@@ -118,6 +124,12 @@ struct ContentView: View {
 #Preview {
     ContentView()
         .environment(AppModel.preview(selecting: Shot.sample))
+        .environment(MainWindowState())
+}
+
+#Preview("Clean Up") {
+    ContentView()
+        .environment(AppModel.preview(scope: .cleanup, selecting: Shot.samples[1]))
         .environment(MainWindowState())
 }
 

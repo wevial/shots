@@ -53,11 +53,19 @@ Take screenshots as usual. Each one is copied to your clipboard right away, then
 
 Open the window from the menu bar icon to browse:
 
-- **Sidebar:** All, Needs Review (screenshots Shots wasn't sure about), Failed, and your categories. Empty categories fold under More.
+- **Sidebar:** All, Needs Review (screenshots Shots wasn't sure about), Failed, Clean Up, and your categories. Empty categories fold under More.
 - **Grid:** newest first, with full-text search. Hover a card to copy it.
 - **Inspector:** a larger preview, Copy / Quick Look / Reveal / Open, the category and Re-run menus, tags, where it came from, and the recognized text.
 
 ![The ⌘K command palette over the Shots window](docs/images/command-palette.png)
+
+### Clean Up
+
+Plenty of screenshots are throwaways: a layout bug to show a coding agent, an error, a CI status, a screen of an app you're building. When the classifier files a screenshot, it also judges whether it's one of these. It gets extra weight when the screenshot was taken in a coding tool (Claude, Codex, Cursor, Xcode, terminals, the Simulator; set `scratchApps`) or of a localhost, dev, staging or preview site.
+
+**Clean Up** in the sidebar lists the scratch screenshots older than a day (`cleanupAfterHours`). Keep the ones you want (they never come back), and move the rest to the Trash one by one (⌘⌫) or all at once. Everything goes to the Trash, so Finder's Put Back still works.
+
+Screenshots filed before Clean Up existed haven't been judged. **Check Older Screenshots** runs the classifier on each of them, one classifier run per screenshot, so it only happens when you ask.
 
 | Key | Action |
 |---|---|
@@ -123,6 +131,8 @@ Settings live in `~/.config/shots/config.json`, created with defaults on first r
   "cloudDenylist": ["com.1password.1password", "…"],
   "cloudDenylistDomains": [],
   "copyToClipboard": true,
+  "scratchApps": ["com.anthropic.claudefordesktop", "com.apple.dt.Xcode", "…"],  // screenshots taken here lean scratch
+  "cleanupAfterHours": 24,                                              // Clean Up waits this long
   "timeoutMs": 30000,
   "claudeCode": { "binary": "claude", "model": "sonnet", "effort": "low" },
   "codex": { "binary": "codex", "model": "gpt-6-luna", "effort": "low" }  // use a model your account can run
@@ -138,6 +148,8 @@ shots search <query> [--limit N] [--json]   search screenshots by their text, ti
 shots recat <file> [--category <name>]      move a screenshot to another category
 shots recat <file> --backend <name>         classify it again with apple, claude-code, codex or rules
 shots review [--failed]                     list screenshots that need review, or failed ones
+shots cleanup [--scan] [--trash] [--json]   list scratch screenshots; --scan judges older ones first, --trash bins the list
+shots cleanup --keep <file>                 never suggest this one again
 shots doctor                                check models, CLIs, permissions and config
 shots config [--json]                       print the active configuration
 ```

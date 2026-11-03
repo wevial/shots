@@ -58,6 +58,12 @@ public struct Config: Sendable, Equatable, Codable {
     /// Files older than this at detection get no app context (it would describe the wrong moment).
     public var contextMaxAgeMs: Int
     public var ocrLanguages: [String]
+    /// Bundle IDs or app names (case-insensitive) whose screenshots are usually scratch:
+    /// coding agents, editors, terminals, simulators, apps you're building. A hint to the
+    /// classifiers, not a verdict.
+    public var scratchApps: [String]
+    /// Scratch shots show up in Clean Up once they're this old.
+    public var cleanupAfterHours: Int
     public var claudeCode: CliBackendConfig
     public var codex: CliBackendConfig
     public var dataDir: String
@@ -67,6 +73,8 @@ public struct Config: Sendable, Equatable, Codable {
     public var timeout: Duration { .milliseconds(timeoutMs) }
     public var retryDelay: Duration { .milliseconds(retryDelayMs) }
     public var contextMaxAge: Duration { .milliseconds(contextMaxAgeMs) }
+    /// Scratch shots captured before this show up in Clean Up.
+    public func cleanupCutoff(now: Date = .now) -> Date { now.addingTimeInterval(-Double(cleanupAfterHours) * 3600) }
     public var databasePath: String { Paths.join(dataDir, "shots.db") }
     public var daemonStatusPath: String { Paths.join(dataDir, "daemon-status.json") }
 }
@@ -113,6 +121,13 @@ extension Config {
         ("net.whatsapp.WhatsApp", "chat"),
     ]
 
+    public static let defaultScratchApps = [
+        "com.anthropic.claudefordesktop", "com.openai.codex", "com.t3tools.t3code",
+        "com.todesktop.230313mzl4w4u92", "com.exafunction.windsurf", "com.microsoft.VSCode", "dev.zed.Zed",
+        "com.apple.dt.Xcode", "com.apple.iphonesimulator", "com.google.android.studio",
+        "com.apple.Terminal", "com.googlecode.iterm2", "com.mitchellh.ghostty", "dev.warp.Warp-Stable", "com.cmuxterm.app",
+    ]
+
     public static func defaults(home: String = Paths.home()) -> Config {
         Config(
             inbox: Paths.join(home, "Screenshots/_inbox"),
@@ -140,6 +155,8 @@ extension Config {
             retryDelayMs: 5 * 60_000,
             contextMaxAgeMs: 15_000,
             ocrLanguages: [],
+            scratchApps: defaultScratchApps,
+            cleanupAfterHours: 24,
             claudeCode: CliBackendConfig(binary: "claude", model: "sonnet", effort: "low"),
             codex: CliBackendConfig(binary: "codex", model: "gpt-6-luna", effort: "low"),
             dataDir: Paths.join(home, ".local/share/shots")
@@ -175,6 +192,8 @@ extension Config: JSONRepresentable {
             "retryDelayMs": JSONValue(retryDelayMs),
             "contextMaxAgeMs": JSONValue(contextMaxAgeMs),
             "ocrLanguages": JSONValue(ocrLanguages),
+            "scratchApps": JSONValue(scratchApps),
+            "cleanupAfterHours": JSONValue(cleanupAfterHours),
             "claudeCode": claudeCode.json,
             "codex": codex.json,
             "dataDir": .string(dataDir),

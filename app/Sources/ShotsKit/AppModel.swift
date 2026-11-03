@@ -46,6 +46,9 @@ public final class AppModel {
     /// Shots with a `recat` running right now. Cards show a spinner while their id is in here.
     public internal(set) var recategorizing: Set<Shot.ID> = []
 
+    /// Progress while older shots are being checked for scratch; nil when no check is running.
+    public internal(set) var scratchCheck: ScratchCheck?
+
     /// The message for the error alert. Set it to nil to dismiss.
     public var lastError: String?
 
@@ -59,6 +62,7 @@ public final class AppModel {
     @ObservationIgnored private var lastDataVersion: Int64?
     @ObservationIgnored private var reloadTask: Task<Void, Never>?
     @ObservationIgnored private var pollTask: Task<Void, Never>?
+    @ObservationIgnored private var scratchCheckTask: Task<Void, Never>?
 
     public init(
         daemon: DaemonController = DaemonController(),
@@ -153,8 +157,9 @@ public final class AppModel {
         guard let store else { return }
         let scope = scope, search = searchText
         do {
-            let shots = try await store.shots(in: scope, matching: search)
-            let counts = try await store.counts()
+            let cutoff = config.cleanupCutoff()
+            let shots = try await store.shots(in: scope, matching: search, cleanupCutoff: cutoff)
+            let counts = try await store.counts(cleanupCutoff: cutoff)
             let failedJobs = try await store.failedJobs()
             let recentShots = try await store.recentShots(limit: 5)
             // A newer reload replaced this one, or the user moved on while it ran (a recat's
@@ -274,6 +279,80 @@ public final class AppModel {
         }
     }
 
+    // MARK: Clean Up
+
+    /// Moves the shots to the Trash. The selection moves on to the next shot, so you can
+    /// keep going from the keyboard.
+    public func moveToTrash(_ doomed: [Shot]) async {
+        guard !doomed.isEmpty else { return }
+        guard daemon.state != .idle else {
+            lastError = "The screenshot engine isn't running, so screenshots can't be changed."
+            return
+        }
+        let ids = Set(doomed.map(\.id))
+        let selectedIndex = selectedShotID.flatMap { id in ids.contains(id) ? shots.firstIndex { $0.id == id } : nil }
+        if let url = quickLookURL, doomed.contains(where: { $0.fileURL == url }) { quickLookURL = nil }
+        do {
+            try await daemon.trash(shotIDs: doomed.map(\.id))
+        } catch {
+            lastError = error.localizedDescription
+        }
+        await reload()
+        if let selectedIndex {
+            selectedShotID = shots.isEmpty ? nil : shots[min(selectedIndex, shots.count - 1)].id
+        }
+    }
+
+    /// Keeps a shot out of Clean Up for good.
+    public func keep(_ shot: Shot) async {
+        do {
+            try await daemon.keep(shotID: shot.id)
+        } catch {
+            lastError = error.localizedDescription
+        }
+        await reload()
+    }
+
+    /// Runs the classifier on shots filed before it judged scratch, one at a time. Each one
+    /// costs a classifier run, so this only happens when asked.
+    public func checkOlderShots() {
+        guard scratchCheckTask == nil else { return }
+        guard daemon.state != .idle else {
+            lastError = "The screenshot engine isn't running, so screenshots can't be checked."
+            return
+        }
+        scratchCheckTask = Task {
+            defer {
+                scratchCheck = nil
+                scratchCheckTask = nil
+            }
+            var failures: [String] = []
+            do {
+                let ids = try await daemon.unjudgedShotIDs()
+                scratchCheck = ScratchCheck(done: 0, total: ids.count)
+                for id in ids {
+                    guard !Task.isCancelled else { break }
+                    do {
+                        try await daemon.judgeScratch(shotID: id)
+                    } catch {
+                        failures.append(error.localizedDescription)
+                    }
+                    scratchCheck?.done += 1
+                }
+            } catch {
+                failures.append(error.localizedDescription)
+            }
+            await reload()
+            if let first = failures.first {
+                lastError = failures.count == 1 ? first : "\(failures.count) screenshots couldn't be checked. The first error: \(first)"
+            }
+        }
+    }
+
+    public func stopCheckingOlderShots() {
+        scratchCheckTask?.cancel()
+    }
+
     private func replace(_ updated: Shot) {
         // recat moved the file; keep an open Quick Look panel pointing at it.
         if let old = shots.first(where: { $0.id == updated.id }), quickLookURL == old.fileURL {
@@ -346,4 +425,10 @@ public final class AppModel {
         guard let tiff = image.tiffRepresentation, let bitmap = NSBitmapImageRep(data: tiff) else { return nil }
         return bitmap.representation(using: .png, properties: [:])
     }
+}
+
+/// How far a check of older shots has got.
+public struct ScratchCheck: Equatable, Sendable {
+    public var done: Int
+    public var total: Int
 }

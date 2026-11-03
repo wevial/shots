@@ -144,7 +144,8 @@ public func processJob(_ jobId: Int64, deps: Deps, onEvent: (CaptureEvent) -> Vo
         let input = ClassifyInput(
             imagePath: path, ocrText: ocr.text, appContext: context, captureType: meta.captureType,
             dimensions: .init(width: ocr.width, height: ocr.height),
-            categories: config.categories, categoryHints: config.categoryHints
+            categories: config.categories, categoryHints: config.categoryHints,
+            scratchHints: scratchHints(context, scratchApps: config.scratchApps)
         )
         let privacy = privacyVerdict(config, context: context)
         let decision = try await runChain(input, backends: deps.backends, config: config, privacy: privacy, rules: deps.rules)
@@ -164,7 +165,8 @@ public func processJob(_ jobId: Int64, deps: Deps, onEvent: (CaptureEvent) -> Vo
             width: ocr.width, height: ocr.height, ocrText: ocr.text,
             category: decision.final.category, suggestedCategory: decision.suggestedCategory,
             tags: decision.final.tags, title: decision.final.title, confidence: decision.final.confidence,
-            backend: decision.backend, review: decision.review, attemptsJSON: decision.attemptsJSON
+            backend: decision.backend, review: decision.review, attemptsJSON: decision.attemptsJSON,
+            scratch: decision.final.scratch
         ))
         do {
             try Files.safeMove(from: path, to: dest)
@@ -281,7 +283,7 @@ public func recat(_ shot: ShotRow, options: RecatOptions, deps: Deps) async thro
             throw ShotsError("unknown category \"\(category)\" (have: \(config.categories.joined(separator: ", ")))")
         }
         decision = decide(
-            ClassifyResult(category: category, tags: shot.tags, title: shot.title, confidence: 1),
+            ClassifyResult(category: category, tags: shot.tags, title: shot.title, confidence: 1, scratch: shot.scratch ?? false),
             backend: "manual", config: config
         )
     } else {
@@ -291,16 +293,7 @@ public func recat(_ shot: ShotRow, options: RecatOptions, deps: Deps) async thro
         if !blocked.isEmpty {
             throw ShotsError("refusing to send to \(blocked.map(\.name).joined(separator: ", ")): \(privacy.reason ?? "cloud disabled")")
         }
-        let dimensions: ClassifyInput.Dimensions? =
-            if let width = shot.width, let height = shot.height, width != 0, height != 0 {
-                .init(width: width, height: height)
-            } else {
-                nil
-            }
-        let input = ClassifyInput(
-            imagePath: shot.path, ocrText: shot.ocrText, appContext: context, captureType: shot.captureType,
-            dimensions: dimensions, categories: config.categories, categoryHints: config.categoryHints
-        )
+        let input = classifyInput(for: shot, context: context, config: config)
         decision = try await runChain(input, backends: options.backends ?? deps.backends, config: config, privacy: privacy, rules: deps.rules)
     }
 
@@ -315,7 +308,9 @@ public func recat(_ shot: ShotRow, options: RecatOptions, deps: Deps) async thro
     let updated = try await deps.database.updateShot(shot.id, ShotUpdate(
         path: dest, category: decision.final.category, suggestedCategory: decision.suggestedCategory,
         tags: decision.final.tags, title: decision.final.title, confidence: decision.final.confidence,
-        backend: decision.backend, review: decision.review, attemptsJSON: decision.attemptsJSON
+        backend: decision.backend, review: decision.review, attemptsJSON: decision.attemptsJSON,
+        // Filing by hand says nothing new about scratch; keep what the classifier said.
+        scratch: options.category == nil ? decision.final.scratch : shot.scratch
     ))
     await applyTags(dest, tags: finderTags(decision), remove: oldTags, deps: deps)
     return RecatOutput(shot: updated, decision: decision)

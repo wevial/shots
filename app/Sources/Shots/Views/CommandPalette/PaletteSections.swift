@@ -14,6 +14,15 @@ extension PaletteSection {
             PaletteCommand(id: "open", title: "Open", systemImage: "arrow.up.forward.app") { model.open(shot) },
         ]
 
+        if shot.isScratch {
+            commands.append(PaletteCommand(id: "keep", title: "Keep", systemImage: "checkmark.circle", tint: .purple) {
+                Task { await model.keep(shot) }
+            })
+        }
+        commands.append(PaletteCommand(id: "trash", title: "Move to Trash", systemImage: "trash", shortcut: "⌘⌫") {
+            Task { await model.moveToTrash([shot]) }
+        })
+
         if shot.needsReview, let suggestion = shot.suggestedCategory {
             commands.append(PaletteCommand(
                 id: "accept", title: "Accept Suggestion: \(suggestion)", systemImage: "checkmark.circle", tint: .orange
@@ -38,12 +47,13 @@ extension PaletteSection {
 
     /// Every sidebar scope.
     static func goTo(model: AppModel) -> PaletteSection {
-        let scopes: [SidebarScope] = [.all, .review, .failed] + model.categories.map { .category($0) }
+        let scopes: [SidebarScope] = [.all, .review, .failed, .cleanup] + model.categories.map { .category($0) }
         let commands = scopes.map { scope in
             let (symbol, tint): (String, Color?) = switch scope {
             case .category(let name): (SidebarView.categorySymbol(name), Theme.color(for: name))
             case .review: (scope.systemImage, .orange)
             case .failed: (scope.systemImage, .red)
+            case .cleanup: (scope.systemImage, .purple)
             case .all: (scope.systemImage, nil)
             }
             return PaletteCommand(id: "go.\(scope.title)", title: scope.title, systemImage: symbol, tint: tint) {

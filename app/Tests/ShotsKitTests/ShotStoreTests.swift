@@ -25,6 +25,22 @@ struct ShotStoreTests {
         #expect(try await store.shots(in: .failed).isEmpty)
     }
 
+    @Test func cleanupHoldsOldScratchShotsNobodyKept() async throws {
+        try db.insertShot(id: 4, category: "code", title: "Layout glitch", capturedAt: "2026-10-18T10:00:00.000Z", scratch: true)
+        try db.insertShot(id: 5, category: "code", title: "Kept glitch", capturedAt: "2026-10-17T10:00:00.000Z", scratch: true, kept: true)
+        try db.insertShot(id: 6, category: "code", title: "Fresh glitch", capturedAt: "2026-10-22T10:00:00.000Z", scratch: true)
+        try db.insertShot(id: 7, category: "code", title: "Worth keeping", capturedAt: "2026-10-16T10:00:00.000Z", scratch: false)
+        let cutoff = try #require(ISODate.parse("2026-10-21T00:00:00.000Z"))
+
+        #expect(try await store.shots(in: .cleanup, cleanupCutoff: cutoff).map(\.id) == [4])
+        #expect(try await store.shots(in: .cleanup, matching: "glitch", cleanupCutoff: cutoff).map(\.id) == [4])
+        let counts = try await store.counts(cleanupCutoff: cutoff)
+        #expect(counts.cleanup == 1)
+        #expect(counts.unjudged == 3) // the three from init()
+        #expect(try await store.shot(id: 4)?.isScratch == true)
+        #expect(try await store.shot(id: 5)?.isScratch == false)
+    }
+
     @Test func searchMatchesPrefixesWithinScope() async throws {
         #expect(try await Set(store.shots(in: .all, matching: "recei").map(\.id)) == [2, 3])
         #expect(try await store.shots(in: .review, matching: "recei").map(\.id) == [3])
@@ -42,7 +58,7 @@ struct ShotStoreTests {
 
     @Test func countsAndFailedJobs() async throws {
         let counts = try await store.counts()
-        #expect(counts == ScopeCounts(all: 3, review: 1, failed: 1, byCategory: ["code": 1, "receipts": 1, "misc": 1]))
+        #expect(counts == ScopeCounts(all: 3, review: 1, failed: 1, unjudged: 3, byCategory: ["code": 1, "receipts": 1, "misc": 1]))
         let jobs = try await store.failedJobs()
         #expect(jobs.map(\.fileName) == ["job-1.png"])
         #expect(jobs.first?.attempts == 3)

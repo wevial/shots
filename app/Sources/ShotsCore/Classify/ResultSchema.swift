@@ -6,12 +6,13 @@ public func resultJsonSchema(categories: [String]) -> JSONValue {
     [
         "type": "object",
         "additionalProperties": false,
-        "required": ["category", "tags", "title", "confidence"],
+        "required": ["category", "tags", "title", "confidence", "scratch"],
         "properties": [
             "category": ["type": "string", "enum": JSONValue(categories)],
             "tags": ["type": "array", "items": ["type": "string"], "maxItems": 8],
             "title": ["type": "string"],
             "confidence": ["type": "number", "minimum": 0, "maximum": 1],
+            "scratch": ["type": "boolean"],
         ],
     ]
 }
@@ -67,7 +68,8 @@ public enum Validation: Sendable, Equatable {
 }
 
 /// Shape check plus normalization. An unknown category is still a valid shape: the chain
-/// maps it to misc + review.
+/// maps it to misc + review. A missing `scratch` counts as false, so a model that leaves it
+/// out still files the shot.
 public func validateResult(_ raw: JSONValue) -> Validation {
     guard case .object(let o) = raw else { return .invalid(["expected a JSON object"]) }
     var errors: [String] = []
@@ -85,7 +87,9 @@ public func validateResult(_ raw: JSONValue) -> Validation {
     if confidence.map({ !$0.isFinite || $0 < 0 || $0 > 1 }) ?? true {
         errors.append("confidence must be a number between 0 and 1")
     }
-    guard errors.isEmpty, let category, let tags, let title, let confidence else { return .invalid(errors) }
+    let scratch: Bool? = if let raw = o["scratch"] { raw.boolValue } else { false }
+    if scratch == nil { errors.append("scratch must be true or false") }
+    guard errors.isEmpty, let category, let tags, let title, let confidence, let scratch else { return .invalid(errors) }
 
     var seen = Set<String>()
     let normalized = tags.map(normalizeTag).filter { !$0.isEmpty && seen.insert($0).inserted }
@@ -93,7 +97,8 @@ public func validateResult(_ raw: JSONValue) -> Validation {
         category: category.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
         tags: Array(normalized.prefix(8)),
         title: title.trimmingCharacters(in: .whitespacesAndNewlines),
-        confidence: confidence
+        confidence: confidence,
+        scratch: scratch
     ))
 }
 
