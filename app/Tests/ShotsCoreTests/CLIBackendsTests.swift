@@ -2,8 +2,8 @@ import Foundation
 import Testing
 @testable import ShotsCore
 
-// Ported from test/cliBackends.test.ts. The "CLIs" are small shell scripts that record each
-// call (NUL-separated argv, cwd, directory listing) and reply with the Nth canned output.
+// Ported from test/cliBackends.test.ts. The "CLIs" are a small shell script that records each
+// call (NUL-separated argv, cwd, directory listing) and replies with the Nth canned output.
 
 private struct FakeCall {
     var args: [String]
@@ -24,27 +24,39 @@ private struct FakeCli {
         for (i, reply) in replies.enumerated() {
             try reply.write(toFile: Paths.join(dir, "reply-\(i)"), atomically: true, encoding: .utf8)
         }
+        try "replies=\(replies.count)\nsleep=\(sleep)\nlast=\(lastMessageFile ? 1 : 0)\n"
+            .write(toFile: Paths.join(dir, "settings"), atomically: true, encoding: .utf8)
         bin = Paths.join(dir, "fake-cli")
-        let script = """
+        try FileManager.default.createSymbolicLink(atPath: bin, withDestinationPath: try Self.script.get())
+    }
+
+    /// One script for every fake, reached through a symlink in each fake's folder. macOS
+    /// checks a newly written executable on its first run, one at a time: with a fresh script
+    /// per test, a few tests in parallel queued for seconds and hit their timeouts.
+    private static let script = Result { () throws -> String in
+        let path = Paths.join(try tempRoot(), "fake-cli")
+        let source = #"""
             #!/bin/sh
-            dir='\(dir)'
-            n=$(ls "$dir/calls" | grep -c '\\.cwd$')
-            printf '%s\\0' "$@" > "$dir/calls/$n.args"
+            dir=${0%/*}
+            . "$dir/settings"
+            n=$(ls "$dir/calls" | grep -c '\.cwd$')
+            printf '%s\0' "$@" > "$dir/calls/$n.args"
             pwd -P > "$dir/calls/$n.cwd"
             ls -A > "$dir/calls/$n.files"
             i=$n
-            if [ "$i" -gt \(replies.count - 1) ]; then i=\(replies.count - 1); fi
-            \(sleep > 0 ? "sleep \(sleep)" : ":")
-            \(lastMessageFile
-                ? """
-                out=""; prev=""
-                for a in "$@"; do if [ "$prev" = "-o" ]; then out="$a"; fi; prev="$a"; done
-                cat "$dir/reply-$i" > "$out"
-                """
-                : "cat \"$dir/reply-$i\"")
-            """
-        try script.write(toFile: bin, atomically: true, encoding: .utf8)
-        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: bin)
+            if [ "$i" -gt $((replies - 1)) ]; then i=$((replies - 1)); fi
+            if [ "$sleep" -gt 0 ]; then sleep "$sleep"; fi
+            if [ "$last" = 1 ]; then
+              out=""; prev=""
+              for a in "$@"; do if [ "$prev" = "-o" ]; then out="$a"; fi; prev="$a"; done
+              cat "$dir/reply-$i" > "$out"
+            else
+              cat "$dir/reply-$i"
+            fi
+            """#
+        try source.write(toFile: path, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: path)
+        return path
     }
 
     var calls: [FakeCall] {
