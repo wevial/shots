@@ -63,7 +63,7 @@ Open the window from the menu bar icon to browse:
 
 Plenty of screenshots are throwaways: a layout bug to show a coding agent, an error, a CI status, a screen of an app you're building. When the classifier files a screenshot, it also judges whether it's one of these. It gets extra weight when the screenshot was taken in a coding tool (Claude, Codex, Cursor, Xcode, terminals, the Simulator; set `scratchApps`) or of a localhost, dev, staging or preview site.
 
-**Clean Up** in the sidebar lists the scratch screenshots older than a day (`cleanupAfterHours`). Keep the ones you want (they never come back), and move the rest to the Trash one by one (⌘⌫) or all at once. Everything goes to the Trash, so Finder's Put Back still works.
+**Clean Up** in the sidebar lists the scratch screenshots older than a week (`cleanupAfterHours`). Keep the ones you want (they never come back), and move the rest to the Trash one by one (⌘⌫) or all at once. Everything goes to the Trash, so Finder's Put Back still works.
 
 Screenshots filed before Clean Up existed haven't been judged. **Check Older Screenshots** runs the classifier on each of them, one classifier run per screenshot, so it only happens when you ask.
 
@@ -132,7 +132,7 @@ Settings live in `~/.config/shots/config.json`, created with defaults on first r
   "cloudDenylistDomains": [],
   "copyToClipboard": true,
   "scratchApps": ["com.anthropic.claudefordesktop", "com.apple.dt.Xcode", "…"],  // screenshots taken here lean scratch
-  "cleanupAfterHours": 24,                                              // Clean Up waits this long
+  "cleanupAfterHours": 168,                                             // Clean Up waits this long
   "timeoutMs": 30000,
   "claudeCode": { "binary": "claude", "model": "sonnet", "effort": "low" },
   "codex": { "binary": "codex", "model": "gpt-6-luna", "effort": "low" }  // use a model your account can run

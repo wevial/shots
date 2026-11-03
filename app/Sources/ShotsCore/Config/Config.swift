@@ -128,6 +128,9 @@ extension Config {
         "com.apple.Terminal", "com.googlecode.iterm2", "com.mitchellh.ghostty", "dev.warp.Warp-Stable", "com.cmuxterm.app",
     ]
 
+    /// A week: long enough that whatever the screenshot was for is done.
+    public static let defaultCleanupAfterHours = 7 * 24
+
     public static func defaults(home: String = Paths.home()) -> Config {
         Config(
             inbox: Paths.join(home, "Screenshots/_inbox"),
@@ -156,7 +159,7 @@ extension Config {
             contextMaxAgeMs: 15_000,
             ocrLanguages: [],
             scratchApps: defaultScratchApps,
-            cleanupAfterHours: 24,
+            cleanupAfterHours: defaultCleanupAfterHours,
             claudeCode: CliBackendConfig(binary: "claude", model: "sonnet", effort: "low"),
             codex: CliBackendConfig(binary: "codex", model: "gpt-6-luna", effort: "low"),
             dataDir: Paths.join(home, ".local/share/shots")

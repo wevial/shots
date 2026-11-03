@@ -20,7 +20,7 @@ public struct ShotsConfig: Sendable, Equatable {
         categoryHints: [String: String] = [:],
         outputRoot: String,
         inbox: String,
-        cleanupAfterHours: Int = 24
+        cleanupAfterHours: Int = Config.defaultCleanupAfterHours
     ) {
         self.configPath = configPath
         self.dbPath = dbPath
@@ -72,7 +72,7 @@ extension ShotsConfig: Decodable {
             categoryHints: try config.decodeIfPresent([String: String].self, forKey: .categoryHints) ?? [:],
             outputRoot: try config.decode(String.self, forKey: .outputRoot),
             inbox: try config.decode(String.self, forKey: .inbox),
-            cleanupAfterHours: try config.decodeIfPresent(Int.self, forKey: .cleanupAfterHours) ?? 24
+            cleanupAfterHours: try config.decodeIfPresent(Int.self, forKey: .cleanupAfterHours) ?? Config.defaultCleanupAfterHours
         )
     }
 }
