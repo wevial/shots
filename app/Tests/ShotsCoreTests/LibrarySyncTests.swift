@@ -1,3 +1,4 @@
+import CoreServices
 import Foundation
 import Synchronization
 import Testing
@@ -83,17 +84,13 @@ private func overwrite(_ path: String, with fixture: String) throws {
 }
 
 extension LibrarySyncTests {
-    @Test func replaysFromAPointInTime() async throws {
+    /// The replay itself is `replaysEditsMadeWhileStopped`. Replaying from this ID can take
+    /// fseventsd tens of seconds (see `eventID`), too slow to wait for here.
+    @Test func pointInTimeStartsNoLaterThanTheTime() throws {
         let before = Date()
-        let (shot, deps) = try await filedShot(root: try tempRoot())
-        try overwrite(shot.path, with: "error.png")
-        try await Task.sleep(for: .milliseconds(200)) // Let fseventsd record it.
-
-        let since = try #require(LibrarySync.eventID(before: before, onVolumeOf: deps.config.outputRoot))
-        let sync = LibrarySync(deps: deps, latency: .milliseconds(50))
-        try await sync.start(since: since)
-        defer { Task { await sync.stop() } }
-        try await until { try await deps.database.shot(id: shot.id)?.ocrText == "cropped text" }
+        let since = try #require(LibrarySync.eventID(before: before, onVolumeOf: try tempRoot()))
+        #expect(since <= FSEventsGetCurrentEventId())
+        #expect(LibrarySync.eventID(before: before, onVolumeOf: "/no/such/folder") == nil)
     }
 }
 

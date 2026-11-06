@@ -50,7 +50,9 @@ public actor LibrarySync {
     }
 
     /// The last event on `path`'s volume before `date`: a `since` that replays from then on.
-    /// Nil when the volume can't be read.
+    /// Nil when the volume can't be read. On APFS fseventsd keeps no time index and answers 0,
+    /// so the replay starts at the beginning of its log: everything still gets replayed, but
+    /// it takes fseventsd tens of seconds to get there.
     public static func eventID(before date: Date, onVolumeOf path: String) -> UInt64? {
         var info = stat()
         guard stat(path, &info) == 0 else { return nil }
