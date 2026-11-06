@@ -68,6 +68,30 @@ struct CompatibilityTests {
         _ = try Database(path: db.path) // Nothing left to migrate.
     }
 
+    /// An index Clean Up's build already gave `scratch` and `kept`, still with the unique hash.
+    @Test func rebuildingTheTableKeepsCleanUpsColumns() async throws {
+        let fixture = URL(filePath: #filePath).deletingLastPathComponent()
+            .appending(path: "../ShotsKitTests/Fixtures/fixture.db").standardized
+        let path = Paths.join(try tempRoot(), "shots.db")
+        try FileManager.default.copyItem(atPath: fixture.path, toPath: path)
+        let raw = try SQLiteConnection(path: path)
+        try raw.execute("""
+            alter table shots add column scratch integer;
+            alter table shots add column kept integer not null default 0;
+            update shots set scratch = 1, kept = 1 where id = (select min(id) from shots);
+            """)
+        raw.close()
+
+        let db = try Database(path: path)
+        let ddl = try SQLiteConnection(path: path).query("select sql from sqlite_master where name = 'shots'") { $0.string("sql") ?? "" }
+        #expect(ddl.first?.contains("sha256 text not null unique") == false)
+        let shots = try SQLiteConnection(path: path).query("select * from shots order by id") { ShotRow(row: $0) }
+        #expect(shots.count == 6)
+        #expect(shots.first?.scratch == true && shots.first?.kept == true)
+        #expect(shots.dropFirst().allSatisfy { $0.scratch == nil && !$0.kept && $0.deletedAt == nil })
+        #expect(try await db.search("receipt").count == (try await openFixture().search("receipt").count))
+    }
+
     @Test func removingAFiledShotUnlinksItsJob() async throws {
         let db = try openFixture()
         let jobs = try SQLiteConnection(path: db.path).query("select shot_id from jobs where shot_id is not null") { $0.int("shot_id") ?? 0 }
