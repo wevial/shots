@@ -52,8 +52,8 @@ public final class AppModel {
     /// The message for the error alert. Set it to nil to dismiss.
     public var lastError: String?
 
-    /// The shot just deleted, offered back in the undo toast until it times out.
-    public internal(set) var undoableDelete: Shot?
+    /// The shots just deleted, offered back in the undo toast until it times out.
+    public internal(set) var undoableDeletes: [Shot] = []
     @ObservationIgnored private var undoTimeout: Task<Void, Never>?
     /// How long the undo toast stays up.
     public static let undoWindow: Duration = .seconds(5)
@@ -287,28 +287,6 @@ public final class AppModel {
 
     // MARK: Clean Up
 
-    /// Moves the shots to the Trash. The selection moves on to the next shot, so you can
-    /// keep going from the keyboard.
-    public func moveToTrash(_ doomed: [Shot]) async {
-        guard !doomed.isEmpty else { return }
-        guard daemon.state != .idle else {
-            lastError = "The screenshot engine isn't running, so screenshots can't be changed."
-            return
-        }
-        let ids = Set(doomed.map(\.id))
-        let selectedIndex = selectedShotID.flatMap { id in ids.contains(id) ? shots.firstIndex { $0.id == id } : nil }
-        if let url = quickLookURL, doomed.contains(where: { $0.fileURL == url }) { quickLookURL = nil }
-        do {
-            try await daemon.trash(shotIDs: doomed.map(\.id))
-        } catch {
-            lastError = error.localizedDescription
-        }
-        await reload()
-        if let selectedIndex {
-            selectedShotID = shots.isEmpty ? nil : shots[min(selectedIndex, shots.count - 1)].id
-        }
-    }
-
     /// Keeps a shot out of Clean Up for good.
     public func keep(_ shot: Shot) async {
         do {
@@ -382,29 +360,43 @@ public final class AppModel {
     /// Puts the shot in Recently Deleted and offers it back in the undo toast; the selection
     /// moves to its neighbor.
     public func delete(_ shot: Shot) async {
-        guard ensureEngine() else { return }
-        do {
-            try await daemon.delete(shotID: shot.id)
-        } catch {
-            lastError = error.localizedDescription
-            return
+        await delete([shot])
+    }
+
+    /// Puts the shots in Recently Deleted and offers them back in the undo toast.
+    public func delete(_ doomed: [Shot]) async {
+        guard !doomed.isEmpty, ensureEngine() else { return }
+        var deleted: [Shot] = []
+        for shot in doomed {
+            do {
+                try await daemon.delete(shotID: shot.id)
+            } catch {
+                lastError = error.localizedDescription
+                break
+            }
+            drop(shot)
+            deleted.append(shot)
         }
-        drop(shot)
-        offerUndo(shot)
+        if !deleted.isEmpty { offerUndo(deleted) }
         await reload()
     }
 
-    /// Restores the shot in the undo toast.
+    /// Restores the shots in the undo toast.
     public func undoDelete() async {
-        guard let shot = undoableDelete else { return }
+        let doomed = undoableDeletes
+        guard !doomed.isEmpty else { return }
         dismissUndo()
-        guard let restored = await restore(shot) else { return }
-        selectedShotID = restored.id
+        var first: Shot?
+        for shot in doomed {
+            guard let restored = await restore(shot) else { break }
+            first = first ?? restored
+        }
+        if let first { selectedShotID = first.id }
     }
 
     public func dismissUndo() {
         undoTimeout?.cancel()
-        undoableDelete = nil
+        undoableDeletes = []
     }
 
     /// Brings a shot back from Recently Deleted to where it was. Nil when it failed (see `lastError`).
@@ -443,13 +435,13 @@ public final class AppModel {
         await deleteImmediately(deleted)
     }
 
-    private func offerUndo(_ shot: Shot) {
+    private func offerUndo(_ shots: [Shot]) {
         undoTimeout?.cancel()
-        undoableDelete = shot
+        undoableDeletes = shots
         undoTimeout = Task { [weak self] in
             try? await Task.sleep(for: Self.undoWindow)
             guard !Task.isCancelled else { return }
-            self?.undoableDelete = nil
+            self?.undoableDeletes = []
         }
     }
 

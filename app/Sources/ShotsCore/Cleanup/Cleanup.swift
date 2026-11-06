@@ -45,16 +45,6 @@ public func judgeScratch(_ shot: ShotRow, deps: Deps) async throws -> Bool {
     return decision.final.scratch
 }
 
-/// Moves the shot's file to the Trash (put back with Finder's Put Back) and drops it from the
-/// index. A file that's already gone just leaves the index. Tests swap `trash` out.
-public func trashShot(
-    _ shot: ShotRow, database: Database,
-    trash: (String) throws -> Void = { try FileManager.default.trashItem(at: URL(filePath: $0), resultingItemURL: nil) }
-) async throws {
-    if FileManager.default.fileExists(atPath: shot.path) { try trash(shot.path) }
-    try await database.removeShot(shot.id)
-}
-
 /// The classifier's input for an indexed shot, from what the index stored about it.
 func classifyInput(for shot: ShotRow, context: AppContext?, config: Config) -> ClassifyInput {
     let dimensions: ClassifyInput.Dimensions? =

@@ -34,13 +34,13 @@ struct ContentView: View {
                 }
                 .navigationTitle(model.scope.title)
                 .overlay(alignment: .bottom) {
-                    if let shot = model.undoableDelete {
-                        UndoToast(shot: shot)
+                    if !model.undoableDeletes.isEmpty {
+                        UndoToast(shots: model.undoableDeletes)
                             .padding(.bottom, 20)
                             .transition(.move(edge: .bottom).combined(with: .opacity))
                     }
                 }
-                .animation(.smooth(duration: 0.25), value: model.undoableDelete)
+                .animation(.smooth(duration: 0.25), value: model.undoableDeletes)
                 .background { Backdrop() }
                 // Let the backdrop show through the title bar instead of an opaque strip.
                 .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
@@ -77,7 +77,7 @@ struct ContentView: View {
             if model.scope == .cleanup && !model.shots.isEmpty {
                 ToolbarItemGroup(placement: .primaryAction) {
                     CheckOlderShotsButton()
-                    TrashAllButton()
+                    DeleteAllButton()
                 }
             }
             if model.scope == .deleted {
@@ -168,11 +168,11 @@ struct ContentView: View {
 /// "Deleted …" with Undo (⌘Z) along the bottom of the window, for `AppModel.undoWindow`.
 private struct UndoToast: View {
     @Environment(AppModel.self) private var model
-    let shot: Shot
+    let shots: [Shot]
 
     var body: some View {
         HStack(spacing: 12) {
-            Text("Deleted “\(shot.displayTitle)”")
+            Text(shots.count == 1 ? "Deleted “\(shots[0].displayTitle)”" : "Deleted \(shots.count) screenshots")
                 .lineLimit(1)
                 .truncationMode(.middle)
             Button("Undo") { Task { await model.undoDelete() } }

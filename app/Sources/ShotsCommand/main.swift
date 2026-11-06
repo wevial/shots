@@ -11,9 +11,9 @@ let usage = """
       shots recat <file> [--backend <\(BackendName.allCases.map(\.rawValue).joined(separator: "|"))>] [--category <name>] [--json]
                                         re-classify and re-file an indexed screenshot
       shots review [--failed]           list low-confidence / unknown-category shots (or failed jobs)
-      shots cleanup [--scan] [--trash] [--json]
+      shots cleanup [--scan] [--delete] [--json]
                                         list scratch shots worth deleting; --scan judges older shots
-                                        first, --trash moves the list to the Trash
+                                        first, --delete moves the list to Recently Deleted
       shots cleanup --keep <file>       never suggest this one again
       shots doctor                      check OS, models, CLIs, auth, permissions, config
       shots config [--json]             print the effective config and its path

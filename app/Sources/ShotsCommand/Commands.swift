@@ -129,11 +129,11 @@ enum Commands {
         return 0
     }
 
-    /// `shots cleanup [--scan] [--trash] [--json]` and `shots cleanup --keep <file>`.
+    /// `shots cleanup [--scan] [--delete] [--json]` and `shots cleanup --keep <file>`.
     /// Lists scratch shots older than `cleanupAfterHours`. `--scan` first runs the classifier
     /// chain on shots filed before it judged scratch (one chain run each).
     static func cleanup(_ args: [String], config: Config) async throws -> Int32 {
-        let parsed = try Arguments(args, options: ["keep"], booleans: ["scan", "trash", "json"])
+        let parsed = try Arguments(args, options: ["keep"], booleans: ["scan", "delete", "json"])
         let deps = try makeDeps(config)
         let database = deps.database
         defer { Task { await database.close() } }
@@ -161,10 +161,10 @@ enum Commands {
         }
 
         let rows = try await database.cleanupSuggestions(capturedBefore: config.cleanupCutoff())
-        if parsed.has("trash") {
+        if parsed.has("delete") {
             for row in rows {
-                try await trashShot(row, database: database)
-                print("trashed \(short(row.path))")
+                _ = try await softDelete(row, deps: deps)
+                print("deleted \(short(row.path))")
             }
             if rows.isEmpty { print("nothing to clean up") }
         } else if parsed.has("json") {
@@ -180,7 +180,7 @@ enum Commands {
                 print("\(row.capturedAt.prefix(16).replacingOccurrences(of: "T", with: " "))  [\(row.category)]  \(row.title)")
                 print("    \(short(row.path))")
             }
-            print("\nmove them to the Trash with: shots cleanup --trash   keep one with: shots cleanup --keep <file>")
+            print("\nmove them to Recently Deleted with: shots cleanup --delete   keep one with: shots cleanup --keep <file>")
         }
         return 0
     }

@@ -25,25 +25,25 @@ struct CheckOlderShotsButton: View {
     }
 }
 
-/// Moves everything Clean Up shows (after any search) to the Trash, once confirmed.
-struct TrashAllButton: View {
+/// Puts everything Clean Up shows (after any search) in Recently Deleted, once confirmed.
+struct DeleteAllButton: View {
     @Environment(AppModel.self) private var model
     @State private var isConfirming = false
 
     var body: some View {
-        Button("Move All to Trash", systemImage: "trash") { isConfirming = true }
+        Button("Delete All", systemImage: "trash") { isConfirming = true }
             .disabled(model.shots.isEmpty)
             .clickable()
             .confirmationDialog(title, isPresented: $isConfirming) {
-                Button("Move to Trash", role: .destructive) {
+                Button("Delete", role: .destructive) {
                     let shots = model.shots
-                    Task { await model.moveToTrash(shots) }
+                    Task { await model.delete(shots) }
                 }
             }
     }
 
     private var title: String {
-        model.shots.count == 1 ? "Move 1 screenshot to the Trash?" : "Move \(model.shots.count) screenshots to the Trash?"
+        model.shots.count == 1 ? "Delete 1 screenshot?" : "Delete \(model.shots.count) screenshots?"
     }
 }
 

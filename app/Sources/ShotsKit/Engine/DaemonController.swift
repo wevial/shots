@@ -225,15 +225,6 @@ public final class DaemonController {
         return RecatResult(try await ShotsCore.recat(row, options: options, deps: deps))
     }
 
-    /// Moves the shots' files to the Trash and drops them from the index.
-    public func trash(shotIDs: [Int64]) async throws {
-        let deps = try runningDeps()
-        for id in shotIDs {
-            guard let row = try await deps.database.shot(id: id) else { continue }
-            try await trashShot(row, database: deps.database)
-        }
-    }
-
     /// Keeps a shot out of Clean Up for good.
     public func keep(shotID: Int64) async throws {
         try await runningDeps().database.keep(shotID)

@@ -124,14 +124,14 @@ struct InspectorView: View {
         .background(.orange.opacity(0.15), in: .rect(cornerRadius: 8))
     }
 
-    /// The classifier thinks this was a throwaway: keep it, or send it to the Trash.
+    /// The classifier thinks this was a throwaway: keep it, or delete it.
     private var scratchCallout: some View {
         HStack {
             Label("Looks like scratch", systemImage: "sparkles")
             Spacer()
             Button("Keep") { Task { await model.keep(shot) } }
                 .clickable()
-            Button("Trash", role: .destructive) { Task { await model.moveToTrash([shot]) } }
+            Button("Delete", role: .destructive) { Task { await model.delete(shot) } }
                 .clickable()
         }
         .disabled(isBusy)

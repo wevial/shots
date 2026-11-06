@@ -96,6 +96,13 @@ struct CleanupIndexTests {
         try await db.keep(old.id)
         #expect(try await db.cleanupSuggestions(capturedBefore: cutoff).map(\.id) == [unjudged.id])
         #expect(try await db.shot(id: old.id)?.kept == true)
+
+        // Recently Deleted isn't the library: nothing there is suggested or left to judge.
+        _ = try await db.markDeleted(unjudged.id, path: "/out/.deleted/shot-4.png", from: "/out/code/shot-4.png")
+        #expect(try await db.cleanupSuggestions(capturedBefore: cutoff).isEmpty)
+        let fresh = try await db.insertShot(shot(5, capturedAt: "2026-10-04T10:00:00.000Z", scratch: nil))
+        _ = try await db.markDeleted(fresh.id, path: "/out/.deleted/shot-5.png", from: "/out/code/shot-5.png")
+        #expect(try await db.unjudgedShots().isEmpty)
     }
 
     @Test func removingAShotUnlinksItsJob() async throws {
@@ -153,30 +160,5 @@ struct CleanupPipelineTests {
         #expect(after.scratch == true)
         #expect(after.path == path && after.category == "code" && after.title == "Original")
         #expect(backend.calls.first?.scratchHints == ["captured in Claude, a coding or development tool"])
-    }
-
-    @Test func trashingMovesTheFileAndDropsTheRow() async throws {
-        let root = try tempRoot()
-        let deps = try testDeps(root, backends: [], native: FakeNative())
-        let path = try Fixtures.drop("code.png", into: Paths.join(root, "out"), as: "a.png")
-        let row = try await deps.database.insertShot(NewShot(
-            path: path, originalName: name, sha256: "sha", capturedAt: Timestamp.now(), processedAt: Timestamp.now(),
-            category: "code", title: "A", confidence: 0.9, backend: "apple", scratch: true
-        ))
-        let trash = Paths.join(root, "Trash")
-        try FileManager.default.createDirectory(atPath: trash, withIntermediateDirectories: true)
-
-        try await trashShot(row, database: deps.database) { try FileManager.default.moveItem(atPath: $0, toPath: Paths.join(trash, "a.png")) }
-        #expect(!FileManager.default.fileExists(atPath: path))
-        #expect(FileManager.default.fileExists(atPath: Paths.join(trash, "a.png")))
-        #expect(try await deps.database.shot(id: row.id) == nil)
-
-        // A file that's already gone just leaves the index.
-        let gone = try await deps.database.insertShot(NewShot(
-            path: Paths.join(root, "missing.png"), originalName: name, sha256: "sha2", capturedAt: Timestamp.now(),
-            processedAt: Timestamp.now(), category: "code", title: "B", confidence: 0.9, backend: "apple"
-        ))
-        try await trashShot(gone, database: deps.database) { _ in Issue.record("nothing to trash") }
-        #expect(try await deps.database.shot(id: gone.id) == nil)
     }
 }
