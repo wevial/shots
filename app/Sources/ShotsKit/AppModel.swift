@@ -27,6 +27,11 @@ public final class AppModel {
         didSet { if searchText != oldValue { scheduleReload(after: .milliseconds(250)) } }
     }
 
+    /// Clean Up also shows scratch shots younger than `cleanupAfterHours`.
+    public var cleanupIncludesRecent = false {
+        didSet { if cleanupIncludesRecent != oldValue { scheduleReload() } }
+    }
+
     public var selectedShotID: Shot.ID?
 
     /// Bound to `.quickLookPreview`; setting a URL opens the Quick Look panel.
@@ -163,7 +168,7 @@ public final class AppModel {
         guard let store else { return }
         let scope = scope, search = searchText
         do {
-            let cutoff = config.cleanupCutoff()
+            let cutoff = cleanupIncludesRecent ? Date.distantFuture : config.cleanupCutoff()
             let shots = try await store.shots(in: scope, matching: search, cleanupCutoff: cutoff)
             let counts = try await store.counts(cleanupCutoff: cutoff)
             let failedJobs = try await store.failedJobs()

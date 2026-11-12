@@ -25,6 +25,18 @@ struct CheckOlderShotsButton: View {
     }
 }
 
+/// Lets Clean Up show scratch shots that haven't reached `cleanupAfterHours` yet.
+struct IncludeRecentToggle: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        @Bindable var model = model
+        Toggle("Include Recent", systemImage: "clock", isOn: $model.cleanupIncludesRecent)
+            .help("Also show scratch screenshots from the last \(model.config.cleanupAfterHours / 24) days")
+            .clickable()
+    }
+}
+
 /// Puts everything Clean Up shows (after any search) in Recently Deleted, once confirmed.
 struct DeleteAllButton: View {
     @Environment(AppModel.self) private var model

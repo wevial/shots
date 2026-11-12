@@ -122,6 +122,10 @@ struct ShotGridView: View {
             ContentUnavailableView {
                 Label("Nothing to Clean Up", systemImage: "sparkles")
             } actions: {
+                if !model.cleanupIncludesRecent {
+                    Button("Include Recent Screenshots") { model.cleanupIncludesRecent = true }
+                        .clickable()
+                }
                 CheckOlderShotsButton()
             }
         } else if model.scope == .deleted {

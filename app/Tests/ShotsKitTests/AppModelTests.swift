@@ -21,6 +21,24 @@ struct AppModelTests {
         #expect(model.shots.map(\.id) == [2])
     }
 
+    @Test func cleanupIncludesRecentSkipsTheAgeCutoff() async throws {
+        let db = try TestDatabase()
+        try db.insertShot(id: 1, category: "code", title: "Old glitch", capturedAt: "2020-01-01T10:00:00.000Z", scratch: true)
+        let fresh = Date.now.addingTimeInterval(-3600).formatted(.iso8601.year().month().day().time(includingFractionalSeconds: true))
+        try db.insertShot(id: 2, category: "code", title: "Fresh glitch", capturedAt: fresh, scratch: true)
+        let model = AppModel(config: .sample, store: try ShotStore(path: db.path))
+        model.scope = .cleanup
+
+        await model.reload()
+        #expect(model.shots.map(\.id) == [1])
+        #expect(model.counts.cleanup == 1)
+
+        model.cleanupIncludesRecent = true
+        await model.reload()
+        #expect(model.shots.map(\.id) == [2, 1])
+        #expect(model.counts.cleanup == 2)
+    }
+
     @Test func searchAllShotsIgnoresTheScopeAndSearchField() async throws {
         let db = try TestDatabase()
         try db.insertShot(id: 1, category: "code", title: "Checkout error", capturedAt: "2026-10-20T10:00:00.000Z")

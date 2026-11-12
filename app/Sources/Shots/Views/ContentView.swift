@@ -74,10 +74,13 @@ struct ContentView: View {
         // Back to the grid after the palette closes, so arrow keys work straight away.
         .onChange(of: window.showsPalette) { _, open in if !open { focus = .grid } }
         .toolbar {
-            if model.scope == .cleanup && !model.shots.isEmpty {
+            if model.scope == .cleanup {
                 ToolbarItemGroup(placement: .primaryAction) {
-                    CheckOlderShotsButton()
-                    DeleteAllButton()
+                    IncludeRecentToggle()
+                    if !model.shots.isEmpty {
+                        CheckOlderShotsButton()
+                        DeleteAllButton()
+                    }
                 }
             }
             if model.scope == .deleted {
